@@ -2,7 +2,7 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -14,6 +14,13 @@ import {
 } from "react-native";
 
 import { useBudget } from "@/context/budget-context";
+import { useSubscription } from "@/src/context/subscription-context";
+import { trackEvent } from "@/src/services/analyticsService";
+import {
+  notifyPurchaseAdded,
+  scheduleInactivityReminder,
+} from "@/src/services/notificationService";
+import { canTrackBuyer, canUseFamilyFeatures } from "@/src/utils/planPermissions";
 
 const normalizarData = (valor: string) => {
   const partes = valor.trim().split("/");
@@ -40,12 +47,32 @@ const normalizarData = (valor: string) => {
   return `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
 };
 
+const dataAtualFormatada = () => {
+  const agora = new Date();
+  return `${String(agora.getDate()).padStart(2, "0")}/${String(agora.getMonth() + 1).padStart(2, "0")}/${agora.getFullYear()}`;
+};
+
 export default function FinalizarCompraScreen() {
   const router = useRouter();
   const { finalizarCompra } = useBudget();
+  const { currentPlan, subscription, isUltimate } = useSubscription();
   const [nomeCompra, setNomeCompra] = useState("");
-  const [dataCompra, setDataCompra] = useState("");
+  const [dataCompra, setDataCompra] = useState(dataAtualFormatada);
   const [fotoNotaUri, setFotoNotaUri] = useState<string | null>(null);
+  const [comprador, setComprador] = useState("");
+  const trackingEnabled = canTrackBuyer(currentPlan, isUltimate);
+  const familyEnabled = canUseFamilyFeatures(currentPlan, isUltimate);
+  const membrosFamilia = subscription?.familyMembers ?? [];
+
+  useEffect(() => {
+    if (!trackingEnabled || comprador.trim().length > 0) {
+      return;
+    }
+
+    if (subscription?.name) {
+      setComprador(subscription.name);
+    }
+  }, [comprador, subscription?.name, trackingEnabled]);
 
   const selecionarImagem = async () => {
     const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -66,7 +93,7 @@ export default function FinalizarCompraScreen() {
     }
   };
 
-  const finalizar = () => {
+  const finalizar = async () => {
     const dataNormalizada = normalizarData(dataCompra);
 
     if (!nomeCompra.trim()) {
@@ -79,10 +106,16 @@ export default function FinalizarCompraScreen() {
       return;
     }
 
-    const resultado = finalizarCompra({
+    if (trackingEnabled && !comprador.trim()) {
+      Alert.alert("Quem realizou a compra?", "Informe o nome de quem concluiu essa compra.");
+      return;
+    }
+
+    const resultado = await finalizarCompra({
       nome: nomeCompra,
       data: dataNormalizada,
       fotoNotaUri,
+      completedBy: trackingEnabled ? comprador : undefined,
     });
 
     if (!resultado.sucesso) {
@@ -91,16 +124,29 @@ export default function FinalizarCompraScreen() {
         return;
       }
 
+      if (resultado.erro === "comprador-vazio") {
+        Alert.alert("Comprador obrigatorio", "Informe quem realizou a compra.");
+        return;
+      }
+
       Alert.alert("Erro", "Nao foi possivel finalizar a compra agora.");
       return;
     }
 
-    Alert.alert("Compra finalizada", "A compra foi salva no historico.", [
-      {
-        text: "OK",
-        onPress: () => router.replace("/(tabs)/gastos"),
+    trackEvent("complete_purchase", {
+      plan: currentPlan,
+      buyer: trackingEnabled ? comprador : "nao-informado",
+    }).catch(() => undefined);
+    notifyPurchaseAdded(trackingEnabled ? comprador : undefined).catch(() => undefined);
+    scheduleInactivityReminder().catch(() => undefined);
+
+    router.replace({
+      pathname: "/(tabs)/gastos",
+      params: {
+        data: dataNormalizada,
+        success: "1",
       },
-    ]);
+    });
   };
 
   return (
@@ -142,6 +188,51 @@ export default function FinalizarCompraScreen() {
           {fotoNotaUri ? (
             <View style={styles.previewCard}>
               <Image source={{ uri: fotoNotaUri }} style={styles.previewImage} contentFit="cover" />
+            </View>
+          ) : null}
+
+          {trackingEnabled ? (
+            <View style={styles.buyerCard}>
+              <Text style={styles.label}>Quem realizou esta compra?</Text>
+              <Text style={styles.buyerHelper}>
+                {familyEnabled
+                  ? "Escolha um membro da familia ou digite o nome manualmente."
+                  : "Digite o nome de quem concluiu esta compra."}
+              </Text>
+
+              {familyEnabled && membrosFamilia.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.membersRow}>
+                  {membrosFamilia.map((membro) => {
+                    const selecionado = comprador.trim().toLowerCase() === membro.toLowerCase();
+
+                    return (
+                      <TouchableOpacity
+                        key={membro}
+                        style={[styles.memberChip, selecionado && styles.memberChipActive]}
+                        onPress={() => setComprador(membro)}>
+                        <Text
+                          style={[
+                            styles.memberChipText,
+                            selecionado && styles.memberChipTextActive,
+                          ]}>
+                          {membro}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              ) : null}
+
+              <TextInput
+                value={comprador}
+                onChangeText={setComprador}
+                style={styles.input}
+                placeholder="Ex.: Paulo"
+                placeholderTextColor="#90a096"
+              />
             </View>
           ) : null}
 
@@ -235,6 +326,39 @@ const styles = StyleSheet.create({
     height: 220,
     borderRadius: 14,
     backgroundColor: "#c8d4ce",
+  },
+  buyerCard: {
+    marginTop: 16,
+    backgroundColor: "#dce7e0",
+    borderRadius: 18,
+    padding: 14,
+  },
+  buyerHelper: {
+    color: "#607068",
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  membersRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingRight: 10,
+    marginBottom: 12,
+  },
+  memberChip: {
+    backgroundColor: "#eef3f0",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  memberChipActive: {
+    backgroundColor: "#2f5d45",
+  },
+  memberChipText: {
+    color: "#2f5d45",
+    fontWeight: "700",
+  },
+  memberChipTextActive: {
+    color: "#fff",
   },
   primaryButton: {
     backgroundColor: "#2f5d45",

@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -10,6 +10,10 @@ import {
 } from "react-native";
 
 import { CompraHistorico, useBudget } from "@/context/budget-context";
+import { PremiumFeatureModal } from "@/src/components/PremiumFeatureModal";
+import { PremiumLockedState } from "@/src/components/PremiumLockedState";
+import { useSubscription } from "@/src/context/subscription-context";
+import { canViewHistory } from "@/src/utils/planPermissions";
 
 const MESES = [
   "Janeiro",
@@ -33,12 +37,30 @@ const formatarData = (data: string) => {
   return `${dia}/${mes}/${ano}`;
 };
 
+const formatarDataCurta = (data: Date | null, fallback: string) =>
+  data
+    ? data.toLocaleDateString("pt-BR")
+    : formatarData(fallback);
+
 export default function HistoricoScreen() {
   const router = useRouter();
   const { carregandoDados, historicoCompras, cicloAno, iniciarNovoCiclo } = useBudget();
+  const { currentPlan, subscriptionLoading, isUltimate } = useSubscription();
   const [mesSelecionado, setMesSelecionado] = useState(new Date().getMonth());
   const [diaSelecionado, setDiaSelecionado] = useState<number | null>(null);
   const [anoVisualizado, setAnoVisualizado] = useState(cicloAno);
+  const [premiumModalVisible, setPremiumModalVisible] = useState(false);
+  const [premiumNoticeShown, setPremiumNoticeShown] = useState(false);
+  const premiumBlocked = !canViewHistory(currentPlan, isUltimate);
+
+  useEffect(() => {
+    if (subscriptionLoading || premiumNoticeShown || !premiumBlocked) {
+      return;
+    }
+
+    setPremiumModalVisible(true);
+    setPremiumNoticeShown(true);
+  }, [premiumBlocked, premiumNoticeShown, subscriptionLoading]);
 
   const comprasDoMes = useMemo(
     () =>
@@ -103,12 +125,35 @@ export default function HistoricoScreen() {
     setDiaSelecionado(null);
   };
 
-  if (carregandoDados) {
+  if (carregandoDados || subscriptionLoading) {
     return (
       <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
         <View style={styles.loadingCard}>
           <Text style={styles.loadingText}>Carregando historico...</Text>
         </View>
+      </LinearGradient>
+    );
+  }
+
+  if (premiumBlocked) {
+    return (
+      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+        <PremiumLockedState
+          title="Historico avancado bloqueado"
+          description="Esse calendario completo de compras fica disponivel nos planos Pro e Familia."
+          onViewPlans={() => {
+            setPremiumModalVisible(false);
+            router.push("/(tabs)/planos");
+          }}
+        />
+        <PremiumFeatureModal
+          visible={premiumModalVisible}
+          onClose={() => setPremiumModalVisible(false)}
+          onViewPlans={() => {
+            setPremiumModalVisible(false);
+            router.push("/(tabs)/planos");
+          }}
+        />
       </LinearGradient>
     );
   }
@@ -159,7 +204,18 @@ export default function HistoricoScreen() {
                 <TouchableOpacity
                   key={bloco.dia}
                   style={[styles.dayCell, selecionado && styles.dayCellActive]}
-                  onPress={() => setDiaSelecionado(bloco.dia)}>
+                  onPress={() => {
+                    setDiaSelecionado(bloco.dia);
+
+                    if (temCompra) {
+                      router.push({
+                        pathname: "/(tabs)/gastos",
+                        params: {
+                          data: `${anoVisualizado}-${String(mesSelecionado + 1).padStart(2, "0")}-${String(bloco.dia).padStart(2, "0")}`,
+                        },
+                      });
+                    }
+                  }}>
                   <Text style={[styles.dayText, selecionado && styles.dayTextActive]}>
                     {bloco.dia}
                   </Text>
@@ -182,21 +238,44 @@ export default function HistoricoScreen() {
           ) : null}
 
           {comprasDoDia.map((compra: CompraHistorico) => (
-            <TouchableOpacity
-              key={compra.id}
-              style={styles.purchaseRow}
-              onPress={() =>
-                router.push({
-                  pathname: "/(tabs)/compra/[id]",
-                  params: { id: String(compra.id) },
-                })
-              }>
-              <View>
+            <View key={compra.id} style={styles.purchaseRow}>
+              <View style={styles.purchaseMainInfo}>
                 <Text style={styles.purchaseName}>{compra.nome}</Text>
                 <Text style={styles.purchaseDate}>{formatarData(compra.data)}</Text>
+                {compra.completedBy ? (
+                  <Text style={styles.purchaseBuyer}>
+                    Compra realizada por {compra.completedBy} em{" "}
+                    {formatarDataCurta(compra.completedAt ?? null, compra.data)}
+                  </Text>
+                ) : null}
               </View>
-              <Text style={styles.purchaseArrow}>Ver</Text>
-            </TouchableOpacity>
+
+              <View style={styles.purchaseActions}>
+                {compra.fotoNotaUri ? (
+                  <TouchableOpacity
+                    style={styles.purchaseActionSecondary}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/(tabs)/nota/[id]",
+                        params: { id: String(compra.id) },
+                      })
+                    }>
+                    <Text style={styles.purchaseActionSecondaryText}>Ver nota</Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                <TouchableOpacity
+                  style={styles.purchaseActionPrimary}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(tabs)/compra/[id]",
+                      params: { id: String(compra.id) },
+                    })
+                  }>
+                  <Text style={styles.purchaseActionPrimaryText}>Detalhes</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           ))}
         </View>
       </ScrollView>
@@ -323,10 +402,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
     marginBottom: 10,
+  },
+  purchaseMainInfo: {
+    marginBottom: 12,
   },
   purchaseName: {
     color: "#2f5d45",
@@ -338,7 +417,36 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 12,
   },
-  purchaseArrow: {
+  purchaseBuyer: {
+    color: "#486756",
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+  purchaseActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  purchaseActionPrimary: {
+    flex: 1,
+    backgroundColor: "#2f5d45",
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  purchaseActionPrimaryText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  purchaseActionSecondary: {
+    flex: 1,
+    backgroundColor: "#dce7e0",
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  purchaseActionSecondaryText: {
     color: "#2f5d45",
     fontWeight: "700",
   },

@@ -1,7 +1,7 @@
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -11,6 +11,10 @@ import {
 } from "react-native";
 
 import { useBudget } from "@/context/budget-context";
+import { PremiumFeatureModal } from "@/src/components/PremiumFeatureModal";
+import { PremiumLockedState } from "@/src/components/PremiumLockedState";
+import { useSubscription } from "@/src/context/subscription-context";
+import { canViewHistory } from "@/src/utils/planPermissions";
 
 const formatarMoeda = (valor: number) =>
   valor.toLocaleString("pt-BR", {
@@ -23,19 +27,58 @@ const formatarData = (data: string) => {
   return `${dia}/${mes}/${ano}`;
 };
 
+const formatarDataDetalhe = (data: Date | null, fallback: string) =>
+  data ? data.toLocaleDateString("pt-BR") : formatarData(fallback);
+
 export default function CompraDetalheScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
   const { buscarCompraPorId, carregandoDados } = useBudget();
+  const { currentPlan, subscriptionLoading, isUltimate } = useSubscription();
+  const [premiumModalVisible, setPremiumModalVisible] = useState(false);
+  const [premiumNoticeShown, setPremiumNoticeShown] = useState(false);
   const compraId = Number(params.id);
   const compra = Number.isNaN(compraId) ? undefined : buscarCompraPorId(compraId);
+  const premiumBlocked = !canViewHistory(currentPlan, isUltimate);
 
-  if (carregandoDados) {
+  useEffect(() => {
+    if (subscriptionLoading || premiumNoticeShown || !premiumBlocked) {
+      return;
+    }
+
+    setPremiumModalVisible(true);
+    setPremiumNoticeShown(true);
+  }, [premiumBlocked, premiumNoticeShown, subscriptionLoading]);
+
+  if (carregandoDados || subscriptionLoading) {
     return (
       <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
         <View style={styles.loadingCard}>
           <Text style={styles.loadingText}>Carregando compra...</Text>
         </View>
+      </LinearGradient>
+    );
+  }
+
+  if (premiumBlocked) {
+    return (
+      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+        <PremiumLockedState
+          title="Detalhes da compra bloqueados"
+          description="A visualizacao completa dos detalhes da compra faz parte dos planos Pro e Familia."
+          onViewPlans={() => {
+            setPremiumModalVisible(false);
+            router.push("/(tabs)/planos");
+          }}
+        />
+        <PremiumFeatureModal
+          visible={premiumModalVisible}
+          onClose={() => setPremiumModalVisible(false)}
+          onViewPlans={() => {
+            setPremiumModalVisible(false);
+            router.push("/(tabs)/planos");
+          }}
+        />
       </LinearGradient>
     );
   }
@@ -64,6 +107,12 @@ export default function CompraDetalheScreen() {
           <View style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>Total gasto</Text>
             <Text style={styles.summaryValue}>{formatarMoeda(compra.totalGasto)}</Text>
+            {compra.completedBy ? (
+              <Text style={styles.summaryMeta}>
+                Compra realizada por {compra.completedBy} em{" "}
+                {formatarDataDetalhe(compra.completedAt ?? null, compra.data)}
+              </Text>
+            ) : null}
           </View>
 
           <Text style={styles.sectionTitle}>Categorias</Text>
@@ -95,13 +144,32 @@ export default function CompraDetalheScreen() {
           {compra.fotoNotaUri ? (
             <>
               <Text style={styles.sectionTitle}>Foto da nota</Text>
-              <View style={styles.imageCard}>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={styles.imageCard}
+                onPress={() =>
+                  router.push({
+                    pathname: "/(tabs)/nota/[id]",
+                    params: { id: String(compra.id) },
+                  })
+                }>
                 <Image
                   source={{ uri: compra.fotoNotaUri }}
                   style={styles.image}
                   contentFit="cover"
                 />
-              </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.viewImageButton}
+                onPress={() =>
+                  router.push({
+                    pathname: "/(tabs)/nota/[id]",
+                    params: { id: String(compra.id) },
+                  })
+                }>
+                <Text style={styles.viewImageButtonText}>Abrir nota com zoom</Text>
+              </TouchableOpacity>
             </>
           ) : null}
         </View>
@@ -173,6 +241,13 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 28,
   },
+  summaryMeta: {
+    color: "#61736a",
+    marginTop: 10,
+    textAlign: "center",
+    lineHeight: 20,
+    fontWeight: "600",
+  },
   sectionTitle: {
     color: "#2f5d45",
     fontWeight: "800",
@@ -233,6 +308,17 @@ const styles = StyleSheet.create({
     height: 240,
     borderRadius: 14,
     backgroundColor: "#c8d4ce",
+  },
+  viewImageButton: {
+    marginTop: 10,
+    backgroundColor: "#2f5d45",
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  viewImageButtonText: {
+    color: "#fff",
+    fontWeight: "700",
   },
   loadingCard: {
     flex: 1,

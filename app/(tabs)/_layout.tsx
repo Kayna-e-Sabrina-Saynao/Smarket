@@ -35,6 +35,13 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarShowLabel: false,
+        tabBarStyle: {
+          backgroundColor: "#10261c",
+          borderTopWidth: 0,
+          height: 68,
+          paddingTop: 8,
+        },
       }}>
       <Tabs.Screen
         name="index"
@@ -51,13 +58,16 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="home"
+        name="explore"
         options={{
-          href: null,
+          title: "Dashboard",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={26} name="square.grid.2x2.fill" color={color} />
+          ),
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="home"
         options={{
           href: null,
         }}
@@ -87,7 +97,55 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="ajuda"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="configuracoes"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="planos"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="convidar-familia"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="privacidade"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="termos"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="sobre"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="compra/[id]"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="nota/[id]"
         options={{
           href: null,
         }}

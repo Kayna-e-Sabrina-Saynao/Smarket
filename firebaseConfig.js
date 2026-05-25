@@ -1,6 +1,20 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import {
+  browserLocalPersistence,
+  getAuth,
+  getReactNativePersistence,
+  initializeAuth,
+  setPersistence,
+} from "firebase/auth";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from "firebase/firestore";
+import { getFunctions } from "firebase/functions";
+import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Configuracao do projeto Firebase usada por autenticacao e banco de dados.
 const firebaseConfig = {
@@ -16,6 +30,41 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // `auth` controla login, registro e logout.
-export const auth = getAuth(app);
+export const auth = (() => {
+  try {
+    if (Platform.OS === "web") {
+      const authWeb = initializeAuth(app, {
+        persistence: browserLocalPersistence,
+      });
+      setPersistence(authWeb, browserLocalPersistence).catch(() => {
+        return;
+      });
+      return authWeb;
+    }
+
+    return initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } catch {
+    const authPadrao = getAuth(app);
+
+    if (Platform.OS === "web") {
+      setPersistence(authPadrao, browserLocalPersistence).catch(() => {
+        return;
+      });
+    }
+
+    return authPadrao;
+  }
+})();
 // `db` centraliza o acesso ao Firestore em todo o app.
-export const db = getFirestore(app);
+export const db =
+  Platform.OS === "web"
+    ? initializeFirestore(app, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+      })
+    : getFirestore(app);
+
+export const functions = getFunctions(app, "us-central1");

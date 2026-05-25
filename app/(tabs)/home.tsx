@@ -3,16 +3,23 @@ import { LinearGradient } from "expo-linear-gradient";
 import { signOut } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import {
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
 
 import { useBudget } from "@/context/budget-context";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { AppEmptyState } from "@/src/components/AppEmptyState";
 import { auth } from "../../firebaseConfig";
 
 const formatarMoeda = (valor: number) =>
@@ -21,11 +28,31 @@ const formatarMoeda = (valor: number) =>
     currency: "BRL",
   });
 
+const MESES = [
+  "Janeiro",
+  "Fevereiro",
+  "Marco",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
+
+const HEADER_EXPANDED_HEIGHT = 252;
+const HEADER_COLLAPSED_HEIGHT = 124;
+const HEADER_SCROLL_DISTANCE = 160;
+
 export default function Home() {
   const router = useRouter();
   const {
     categorias,
     carregandoDados,
+    forcarSalvarDados,
     items,
     orcamentoTotal,
     valorGasto,
@@ -38,10 +65,14 @@ export default function Home() {
   const [categoriaAtiva, setCategoriaAtiva] = useState("Tudo");
   const [orcamentoInput, setOrcamentoInput] = useState(String(orcamentoTotal));
   const [saindo, setSaindo] = useState(false);
+  const scrollY = useSharedValue(0);
 
   useEffect(() => {
     setOrcamentoInput(String(orcamentoTotal));
   }, [orcamentoTotal]);
+
+  const dataAtual = new Date();
+  const mesAtual = `${MESES[dataAtual.getMonth()]} ${dataAtual.getFullYear()}`;
 
   // O filtro permite visualizar todos os itens ou apenas uma categoria por vez.
   const percentualGasto = orcamentoTotal === 0 ? 0 : (valorGasto / orcamentoTotal) * 100;
@@ -50,6 +81,43 @@ export default function Home() {
     categoriaAtiva === "Tudo"
       ? items.filter((item) => item.quantidade > 0)
       : items.filter((item) => item.categoria === categoriaAtiva && item.quantidade > 0);
+
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
+
+  const compactableHeaderStyle = useAnimatedStyle(() => ({
+    height: interpolate(
+      scrollY.value,
+      [0, HEADER_SCROLL_DISTANCE],
+      [HEADER_EXPANDED_HEIGHT, HEADER_COLLAPSED_HEIGHT],
+      Extrapolation.CLAMP
+    ),
+  }));
+
+  const compactDetailsStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [0, HEADER_SCROLL_DISTANCE * 0.7], [1, 0], Extrapolation.CLAMP),
+    transform: [
+      {
+        translateY: interpolate(
+          scrollY.value,
+          [0, HEADER_SCROLL_DISTANCE],
+          [0, -18],
+          Extrapolation.CLAMP
+        ),
+      },
+    ],
+  }));
+
+  const compactSummaryStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        scale: interpolate(scrollY.value, [0, HEADER_SCROLL_DISTANCE], [1, 0.88], Extrapolation.CLAMP),
+      },
+    ],
+  }));
 
   if (carregandoDados) {
     return (
@@ -79,7 +147,9 @@ export default function Home() {
 
     setSaindo(true);
     try {
+      await forcarSalvarDados();
       await signOut(auth);
+      router.replace("/");
     } catch {
       setSaindo(false);
       alert("Nao foi possivel sair agora.");
@@ -90,7 +160,22 @@ export default function Home() {
     <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
       <View style={styles.card}>
         <View style={styles.headerRow}>
-          <View />
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.helpIconButton}
+              onPress={() => router.push("/(tabs)/ajuda")}>
+              <View style={styles.helpIconInner}>
+                <Text style={styles.helpIconText}>?</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.settingsIconButton}
+              onPress={() => router.push("/(tabs)/configuracoes")}>
+              <IconSymbol name="gearshape.fill" size={24} color="#9ee0a2" />
+            </TouchableOpacity>
+          </View>
+
           <TouchableOpacity
             style={styles.logoutButton}
             onPress={sairDaConta}
@@ -104,55 +189,62 @@ export default function Home() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.title}>Orcamento</Text>
-        <Text style={styles.month}>Janeiro 2026</Text>
+        <Animated.View style={[styles.compactableHeader, compactableHeaderStyle]}>
+          <Animated.View style={compactSummaryStyle}>
+            <Text style={styles.title}>Resumo Financeiro</Text>
+            <Text style={styles.month}>{mesAtual}</Text>
+          </Animated.View>
 
-        <View style={styles.orcamentoEditor}>
-          <Text style={styles.orcamentoLabel}>Orcamento total</Text>
-          <View style={styles.orcamentoRow}>
-            <TextInput
-              value={orcamentoInput}
-              onChangeText={setOrcamentoInput}
-              keyboardType="decimal-pad"
-              style={styles.orcamentoInput}
-              placeholder="Digite o valor"
-              placeholderTextColor="#88958d"
-            />
-            <TouchableOpacity style={styles.orcamentoButton} onPress={salvarOrcamento}>
-              <Text style={styles.orcamentoButtonText}>Salvar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          <Animated.View style={compactDetailsStyle}>
+            <View style={styles.orcamentoEditor}>
+              <Text style={styles.orcamentoLabel}>Orcamento total</Text>
+              <View style={styles.orcamentoRow}>
+                <TextInput
+                  value={orcamentoInput}
+                  onChangeText={setOrcamentoInput}
+                  keyboardType="decimal-pad"
+                  style={styles.orcamentoInput}
+                  placeholder="Digite o valor"
+                  placeholderTextColor="#88958d"
+                />
+                <TouchableOpacity style={styles.orcamentoButton} onPress={salvarOrcamento}>
+                  <Text style={styles.orcamentoButtonText}>Salvar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
-        <Text style={styles.value}>{formatarMoeda(orcamentoTotal)}</Text>
+            <Text style={styles.value}>{formatarMoeda(orcamentoTotal)}</Text>
 
-        <View style={styles.progressContainer}>
-          <View
-            style={[
-              styles.progress,
-              {
-                width: `${Math.min(Math.max(percentualGasto, 0), 100)}%`,
-                backgroundColor: orcamentoRestante < 0 ? "#c0392b" : "#2f5d45",
-              },
-            ]}
-          />
-        </View>
+            <View style={styles.progressContainer}>
+              <View
+                style={[
+                  styles.progress,
+                  {
+                    width: `${Math.min(Math.max(percentualGasto, 0), 100)}%`,
+                    backgroundColor: orcamentoRestante < 0 ? "#c0392b" : "#2f5d45",
+                  },
+                ]}
+              />
+            </View>
 
-        <View style={styles.rowBetween}>
-          <Text style={styles.label}>Orcamento Restante</Text>
-          <Text style={styles.label}>Valor Gasto</Text>
-        </View>
+            <View style={styles.rowBetween}>
+              <Text style={styles.label}>Orcamento Restante</Text>
+              <Text style={styles.label}>Valor Gasto</Text>
+            </View>
 
-        <View style={styles.rowBetween}>
-          <Text
-            style={[
-              styles.labelValue,
-              orcamentoRestante < 0 && styles.labelValueNegative,
-            ]}>
-            {formatarMoeda(orcamentoRestante)}
-          </Text>
-          <Text style={styles.labelValue}>{formatarMoeda(valorGasto)}</Text>
-        </View>
+            <View style={styles.rowBetween}>
+              <Text
+                style={[
+                  styles.labelValue,
+                  orcamentoRestante < 0 && styles.labelValueNegative,
+                ]}>
+                {formatarMoeda(orcamentoRestante)}
+              </Text>
+              <Text style={styles.labelValue}>{formatarMoeda(valorGasto)}</Text>
+            </View>
+
+          </Animated.View>
+        </Animated.View>
 
         <TouchableOpacity
           style={styles.finishButton}
@@ -163,7 +255,7 @@ export default function Home() {
           <Text style={styles.finishButtonText}>Finalizar Compra</Text>
         </TouchableOpacity>
 
-        <ScrollView
+        <Animated.ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.categoriesScroll}
@@ -186,10 +278,22 @@ export default function Home() {
               </Text>
             </TouchableOpacity>
           ))}
-        </ScrollView>
+        </Animated.ScrollView>
 
-        <ScrollView style={styles.listaContainer} showsVerticalScrollIndicator={false}>
-          {itemsFiltrados.length === 0 ? (
+        <Animated.ScrollView
+          style={styles.listaContainer}
+          showsVerticalScrollIndicator={false}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          contentContainerStyle={styles.listaContent}>
+          {items.length === 0 && categoriaAtiva === "Tudo" ? (
+            <AppEmptyState
+              title="Sua primeira lista comeca aqui"
+              description="Organize suas compras em segundos"
+              buttonLabel="Criar lista"
+              onPress={() => router.push("/(tabs)/add")}
+            />
+          ) : itemsFiltrados.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>Nenhum item encontrado nesta categoria</Text>
             </View>
@@ -235,7 +339,7 @@ export default function Home() {
               </View>
             ))
           )}
-        </ScrollView>
+        </Animated.ScrollView>
 
         <View style={styles.bottomActions}>
           <TouchableOpacity
@@ -284,11 +388,77 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
+  compactableHeader: {
+    overflow: "hidden",
+  },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: 10,
+  },
+  headerActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  iconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#eef3f0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  helpIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#9ee0a2",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  helpIconInner: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  helpIconText: {
+    color: "#111",
+    fontSize: 24,
+    lineHeight: 24,
+    fontWeight: "900",
+  },
+  settingsIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#2f5d45",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  settingsIconText: {
+    color: "#9ee0a2",
+    fontSize: 24,
+    lineHeight: 24,
+    fontWeight: "900",
   },
   logoutButton: {
     flexDirection: "row",
@@ -306,21 +476,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "bold",
     textAlign: "center",
     color: "#2f5d45",
   },
   month: {
     textAlign: "center",
-    color: "#666",
-    marginBottom: 14,
+    color: "#5d6d65",
+    marginBottom: 18,
     fontSize: 14,
   },
   orcamentoEditor: {
     backgroundColor: "#dce7e0",
     borderRadius: 18,
     padding: 12,
+    borderWidth: 1,
+    borderColor: "#d0ddd6",
   },
   orcamentoLabel: {
     fontSize: 13,
@@ -353,10 +525,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   value: {
-    fontSize: 34,
+    fontSize: 38,
     fontWeight: "bold",
     textAlign: "center",
-    marginVertical: 14,
+    marginVertical: 16,
     color: "#2f5d45",
   },
   progressContainer: {
@@ -389,13 +561,13 @@ const styles = StyleSheet.create({
   },
   finishButton: {
     marginTop: 16,
-    backgroundColor: "#dce7e0",
+    backgroundColor: "#2f5d45",
     borderRadius: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
     alignItems: "center",
   },
   finishButtonText: {
-    color: "#2f5d45",
+    color: "#fff",
     fontWeight: "800",
     fontSize: 14,
   },
@@ -427,6 +599,9 @@ const styles = StyleSheet.create({
   listaContainer: {
     marginTop: 20,
     flex: 1,
+  },
+  listaContent: {
+    paddingBottom: 110,
   },
   item: {
     marginBottom: 12,

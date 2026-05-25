@@ -12,6 +12,14 @@ import {
 } from "react-native";
 
 import { Categoria, useBudget } from "@/context/budget-context";
+import { PremiumFeatureModal } from "@/src/components/PremiumFeatureModal";
+import { useSubscription } from "@/src/context/subscription-context";
+import { trackEvent } from "@/src/services/analyticsService";
+import {
+  notifyListUpdated,
+  scheduleInactivityReminder,
+} from "@/src/services/notificationService";
+import { canUseCustomization } from "@/src/utils/planPermissions";
 
 const CORES_PERSONALIZADAS = [
   "#2f5d45",
@@ -26,6 +34,7 @@ const CORES_PERSONALIZADAS = [
 
 export default function AddItemScreen() {
   const router = useRouter();
+  const { currentPlan, subscription, isUltimate } = useSubscription();
   const {
     carregandoDados,
     opcoesCategoria,
@@ -42,6 +51,13 @@ export default function AddItemScreen() {
     CORES_PERSONALIZADAS[0]
   );
   const [mostrarGerenciarCategorias, setMostrarGerenciarCategorias] = useState(false);
+  const [premiumModalVisible, setPremiumModalVisible] = useState(false);
+  const customizationEnabled = canUseCustomization(currentPlan, isUltimate);
+
+  const abrirPlanos = () => {
+    setPremiumModalVisible(false);
+    router.push("/(tabs)/planos");
+  };
 
   const salvar = () => {
     const quantidadeNumerica = Number(quantidade);
@@ -59,6 +75,11 @@ export default function AddItemScreen() {
     }
 
     if (usarCategoriaPersonalizada) {
+      if (!customizationEnabled) {
+        setPremiumModalVisible(true);
+        return;
+      }
+
       if (!nomeCategoriaPersonalizada.trim()) {
         Alert.alert("Categoria obrigatoria", "Informe um nome para a categoria personalizada.");
         return;
@@ -88,22 +109,26 @@ export default function AddItemScreen() {
       quantidade: quantidadeNumerica,
     });
 
+    trackEvent("create_list", {
+      category: categoriaSelecionada,
+      quantity: quantidadeNumerica,
+    }).catch(() => undefined);
+    notifyListUpdated(subscription?.name).catch(() => undefined);
+    scheduleInactivityReminder().catch(() => undefined);
+
     router.back();
   };
   const categoriasPersonalizadas = opcoesCategoria.filter((categoria) => categoria.personalizada);
 
   const apagarCategoria = (nomeCategoria: string) => {
+    if (!customizationEnabled) {
+      setPremiumModalVisible(true);
+      return;
+    }
+
     const resultado = removerCategoriaPersonalizada(nomeCategoria);
 
     if (!resultado.sucesso) {
-      if (resultado.erro === "categoria-em-uso") {
-        Alert.alert(
-          "Categoria em uso",
-          "Remova os itens dessa categoria antes de apaga-la."
-        );
-        return;
-      }
-
       Alert.alert("Erro", "Nao foi possivel apagar essa categoria.");
       return;
     }
@@ -173,7 +198,14 @@ export default function AddItemScreen() {
 
           <TouchableOpacity
             style={[styles.customToggle, usarCategoriaPersonalizada && styles.customToggleActive]}
-            onPress={() => setUsarCategoriaPersonalizada((estadoAtual) => !estadoAtual)}>
+            onPress={() => {
+              if (!customizationEnabled) {
+                setPremiumModalVisible(true);
+                return;
+              }
+
+              setUsarCategoriaPersonalizada((estadoAtual) => !estadoAtual);
+            }}>
             <Text
               style={[
                 styles.customToggleText,
@@ -184,6 +216,12 @@ export default function AddItemScreen() {
                 : "Criar categoria personalizada"}
             </Text>
           </TouchableOpacity>
+
+          {!customizationEnabled ? (
+            <Text style={styles.premiumHint}>
+              Personalizacao esta disponivel apenas nos planos Pro e Familia.
+            </Text>
+          ) : null}
 
           {usarCategoriaPersonalizada ? (
             <View style={styles.customCard}>
@@ -219,9 +257,14 @@ export default function AddItemScreen() {
             <View style={styles.manageSection}>
               <TouchableOpacity
                 style={styles.manageToggle}
-                onPress={() =>
-                  setMostrarGerenciarCategorias((estadoAtual) => !estadoAtual)
-                }>
+                onPress={() => {
+                  if (!customizationEnabled) {
+                    setPremiumModalVisible(true);
+                    return;
+                  }
+
+                  setMostrarGerenciarCategorias((estadoAtual) => !estadoAtual);
+                }}>
                 <Text style={styles.manageToggleText}>
                   {mostrarGerenciarCategorias
                     ? "Ocultar categorias personalizadas"
@@ -276,6 +319,14 @@ export default function AddItemScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <PremiumFeatureModal
+        visible={premiumModalVisible}
+        onClose={() => setPremiumModalVisible(false)}
+        onViewPlans={abrirPlanos}
+        title="Recurso Premium"
+        description="Personalizacao esta disponivel apenas nos planos Pro e Familia."
+      />
     </LinearGradient>
   );
 }
@@ -369,6 +420,12 @@ const styles = StyleSheet.create({
   },
   customToggleTextActive: {
     color: "#fff",
+  },
+  premiumHint: {
+    color: "#66766d",
+    marginBottom: 12,
+    lineHeight: 19,
+    textAlign: "center",
   },
   customCard: {
     backgroundColor: "#dce7e0",

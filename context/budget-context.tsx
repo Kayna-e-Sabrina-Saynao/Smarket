@@ -1,6 +1,8 @@
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
+  useCallback,
   createContext,
   ReactNode,
   useContext,
@@ -55,6 +57,9 @@ export type CompraHistorico = {
   nome: string;
   data: string;
   fotoNotaUri?: string | null;
+  completedBy?: string | null;
+  completedAt?: Date | null;
+  createdAt?: Date | null;
   items: Item[];
   totalGasto: number;
   mediaDiaria: number;
@@ -77,6 +82,7 @@ type BudgetContextValue = {
   orcamentoRestante: number;
   gastosPorCategoria: GastoCategoria[];
   carregandoDados: boolean;
+  forcarSalvarDados: () => Promise<void>;
   definirOrcamentoTotal: (valor: number) => void;
   adicionarItem: (item: NovoItem) => void;
   adicionarOnMarketItem: (item: NovoOnMarketItem) => void;
@@ -85,10 +91,11 @@ type BudgetContextValue = {
     nome: string;
     data: string;
     fotoNotaUri?: string | null;
-  }) => {
+    completedBy?: string | null;
+  }) => Promise<{
     sucesso: boolean;
-    erro?: "sem-itens" | "nome-vazio" | "data-vazia";
-  };
+    erro?: "sem-itens" | "nome-vazio" | "data-vazia" | "comprador-vazio";
+  }>;
   iniciarNovoCiclo: (ano: number) => void;
   buscarCompraPorId: (id: number) => CompraHistorico | undefined;
   adicionarCategoriaPersonalizada: (nome: string, cor: string) => {
@@ -98,7 +105,7 @@ type BudgetContextValue = {
   };
   removerCategoriaPersonalizada: (nome: string) => {
     sucesso: boolean;
-    erro?: "categoria-em-uso" | "categoria-nao-encontrada";
+    erro?: "categoria-nao-encontrada";
   };
   deletarItem: (id: number) => void;
   incrementarQuantidade: (id: number) => void;
@@ -114,6 +121,7 @@ type DadosSalvos = {
   historicoCompras?: CompraHistorico[];
   categoriasPersonalizadas?: CategoriaOpcao[];
   cicloAno?: number;
+  ultimaAtualizacaoLocal?: number;
 };
 
 const categoriasPadrao: CategoriaOpcao[] = [
@@ -127,7 +135,9 @@ const categoriasPadrao: CategoriaOpcao[] = [
   { nome: "Padaria", cor: "#d4a373" },
 ];
 
-const anoAtual = new Date().getFullYear();
+const ANO_FIXO_CICLO = 2026;
+const normalizarCicloAno = () => ANO_FIXO_CICLO;
+const chaveBackupLocal = (uid: string) => `smarket:orcamento:${uid}`;
 
 const dadosIniciais: DadosSalvos = {
   orcamentoTotal: 0,
@@ -135,7 +145,8 @@ const dadosIniciais: DadosSalvos = {
   onMarketItems: [],
   historicoCompras: [],
   categoriasPersonalizadas: [],
-  cicloAno: anoAtual,
+  cicloAno: normalizarCicloAno(),
+  ultimaAtualizacaoLocal: 0,
 };
 
 const BudgetContext = createContext<BudgetContextValue | undefined>(undefined);
@@ -144,6 +155,31 @@ const calcularValorItem = (item: Pick<Item, "quantidade" | "valorUnitario">) =>
   item.quantidade * item.valorUnitario;
 
 const normalizarNomeCategoria = (nome: string) => nome.trim();
+
+const normalizarCampoData = (valor: unknown): Date | null => {
+  if (valor instanceof Date) {
+    return valor;
+  }
+
+  if (
+    typeof valor === "object" &&
+    valor !== null &&
+    "toDate" in valor &&
+    typeof (valor as { toDate: () => Date }).toDate === "function"
+  ) {
+    return (valor as { toDate: () => Date }).toDate();
+  }
+
+  if (typeof valor === "string" || typeof valor === "number") {
+    const data = new Date(valor);
+
+    if (!Number.isNaN(data.getTime())) {
+      return data;
+    }
+  }
+
+  return null;
+};
 
 const getCorCategoria = (categoria: string, categoriasPersonalizadas: CategoriaOpcao[]) => {
   const categoriaPadrao = categoriasPadrao.find((item) => item.nome === categoria);
@@ -234,6 +270,12 @@ const normalizarCompraHistorico = (
   return {
     ...compra,
     fotoNotaUri: compra.fotoNotaUri ?? null,
+    completedBy:
+      typeof compra.completedBy === "string" && compra.completedBy.trim().length > 0
+        ? compra.completedBy.trim()
+        : null,
+    completedAt: normalizarCampoData(compra.completedAt),
+    createdAt: normalizarCampoData(compra.createdAt),
     items,
     totalGasto:
       typeof compra.totalGasto === "number"
@@ -255,19 +297,229 @@ const normalizarCompraHistorico = (
 const usuarioDocRef = (uid: string) => doc(db, "usuarios", uid);
 const orcamentoDocRef = (uid: string) => doc(db, "usuarios", uid, "orcamento", "atual");
 
+const lerBackupLocalStorage = (uid: string): DadosSalvos | null => {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return null;
+    }
+
+    const dados = window.localStorage.getItem(chaveBackupLocal(uid));
+
+    if (!dados) {
+      return null;
+    }
+
+    return JSON.parse(dados) as DadosSalvos;
+  } catch {
+    return null;
+  }
+};
+
+const salvarBackupLocalStorage = (uid: string, dados: DadosSalvos) => {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return;
+    }
+
+    window.localStorage.setItem(chaveBackupLocal(uid), JSON.stringify(dados));
+  } catch {
+    return;
+  }
+};
+
+const lerBackupLocal = async (uid: string): Promise<DadosSalvos | null> => {
+  const backupLocalStorage = lerBackupLocalStorage(uid);
+
+  if (backupLocalStorage) {
+    return backupLocalStorage;
+  }
+
+  try {
+    const dados = await AsyncStorage.getItem(chaveBackupLocal(uid));
+
+    if (!dados) {
+      return null;
+    }
+
+    return JSON.parse(dados) as DadosSalvos;
+  } catch {
+    return null;
+  }
+};
+
+const salvarBackupLocal = async (uid: string, dados: DadosSalvos) => {
+  salvarBackupLocalStorage(uid, dados);
+
+  try {
+    await AsyncStorage.setItem(chaveBackupLocal(uid), JSON.stringify(dados));
+  } catch {
+    return;
+  }
+};
+
+const normalizarDadosSalvos = (dados: Partial<DadosSalvos>): DadosSalvos => {
+  const categoriasCustomizadas = normalizarCategoriasPersonalizadas(
+    dados.categoriasPersonalizadas
+  );
+
+  return {
+    orcamentoTotal: typeof dados.orcamentoTotal === "number" ? dados.orcamentoTotal : 0,
+    categoriasPersonalizadas: categoriasCustomizadas,
+    cicloAno: normalizarCicloAno(),
+    items: Array.isArray(dados.items)
+      ? dados.items.map((item) => normalizarItem(item as Item, categoriasCustomizadas))
+      : [],
+    onMarketItems: Array.isArray(dados.onMarketItems)
+      ? dados.onMarketItems.map((item) =>
+          normalizarOnMarketItem(item as OnMarketItem, categoriasCustomizadas)
+        )
+      : [],
+    historicoCompras: Array.isArray(dados.historicoCompras)
+      ? dados.historicoCompras.map((compra) =>
+          normalizarCompraHistorico(compra as CompraHistorico, categoriasCustomizadas)
+        )
+      : [],
+    ultimaAtualizacaoLocal:
+      typeof dados.ultimaAtualizacaoLocal === "number" ? dados.ultimaAtualizacaoLocal : 0,
+  };
+};
+
 export function BudgetProvider({ children }: { children: ReactNode }) {
   const [orcamentoTotal, setOrcamentoTotal] = useState(0);
   const [items, setItems] = useState<Item[]>([]);
   const [onMarketItems, setOnMarketItems] = useState<OnMarketItem[]>([]);
   const [historicoCompras, setHistoricoCompras] = useState<CompraHistorico[]>([]);
   const [categoriasPersonalizadas, setCategoriasPersonalizadas] = useState<CategoriaOpcao[]>([]);
-  const [cicloAno, setCicloAno] = useState(anoAtual);
+  const [cicloAno, setCicloAno] = useState(ANO_FIXO_CICLO);
   const [carregandoDados, setCarregandoDados] = useState(true);
   const usuarioAtualRef = useRef<string | null>(null);
   const podeSalvarRef = useRef(false);
+  const orcamentoTotalRef = useRef(0);
+  const itemsRef = useRef<Item[]>([]);
+  const onMarketItemsRef = useRef<OnMarketItem[]>([]);
+  const historicoComprasRef = useRef<CompraHistorico[]>([]);
+  const categoriasPersonalizadasRef = useRef<CategoriaOpcao[]>([]);
+  const cicloAnoRef = useRef(ANO_FIXO_CICLO);
+
+  const salvarDadosUsuario = useCallback(async (uid: string, dadosParaSalvar: DadosSalvos) => {
+    if (!uid) {
+      return;
+    }
+
+    await salvarBackupLocal(uid, dadosParaSalvar);
+
+    try {
+      await setDoc(orcamentoDocRef(uid), {
+        ...dadosParaSalvar,
+        atualizadoEm: serverTimestamp(),
+      });
+    } catch {
+      return;
+    }
+  }, []);
+
+  const salvarEstadoAtualComOverrides = useCallback(
+    async (overrides?: Partial<DadosSalvos>) => {
+      const uid = usuarioAtualRef.current;
+
+      if (!uid) {
+        return;
+      }
+
+      const dadosParaSalvar = {
+        orcamentoTotal: overrides?.orcamentoTotal ?? orcamentoTotalRef.current,
+        items: overrides?.items ?? itemsRef.current,
+        onMarketItems: overrides?.onMarketItems ?? onMarketItemsRef.current,
+        historicoCompras: overrides?.historicoCompras ?? historicoComprasRef.current,
+        categoriasPersonalizadas:
+          overrides?.categoriasPersonalizadas ?? categoriasPersonalizadasRef.current,
+        cicloAno: overrides?.cicloAno ?? cicloAnoRef.current,
+        ultimaAtualizacaoLocal: Date.now(),
+      };
+
+      await salvarBackupLocal(uid, dadosParaSalvar);
+
+      if (!podeSalvarRef.current) {
+        return;
+      }
+
+      await salvarDadosUsuario(uid, dadosParaSalvar);
+    },
+    [salvarDadosUsuario]
+  );
+
+  const montarDadosParaSalvar = useCallback(
+    (): DadosSalvos => ({
+      orcamentoTotal,
+      items,
+      onMarketItems,
+      historicoCompras,
+      categoriasPersonalizadas,
+      cicloAno,
+      ultimaAtualizacaoLocal: Date.now(),
+    }),
+    [
+      categoriasPersonalizadas,
+      cicloAno,
+      historicoCompras,
+      items,
+      onMarketItems,
+      orcamentoTotal,
+    ]
+  );
+
+  const forcarSalvarDados = useCallback(async () => {
+    const uid = usuarioAtualRef.current;
+
+    if (!uid) {
+      return;
+    }
+
+    await salvarDadosUsuario(uid, montarDadosParaSalvar());
+  }, [montarDadosParaSalvar, salvarDadosUsuario]);
+
+  const aplicarDadosSalvos = (dados: DadosSalvos) => {
+    orcamentoTotalRef.current = dados.orcamentoTotal;
+    itemsRef.current = dados.items;
+    onMarketItemsRef.current = dados.onMarketItems ?? [];
+    historicoComprasRef.current = dados.historicoCompras ?? [];
+    categoriasPersonalizadasRef.current = dados.categoriasPersonalizadas ?? [];
+    cicloAnoRef.current = normalizarCicloAno();
+    setOrcamentoTotal(dados.orcamentoTotal);
+    setItems(dados.items);
+    setOnMarketItems(dados.onMarketItems ?? []);
+    setHistoricoCompras(dados.historicoCompras ?? []);
+    setCategoriasPersonalizadas(dados.categoriasPersonalizadas ?? []);
+    setCicloAno(normalizarCicloAno());
+  };
+
+  useEffect(() => {
+    orcamentoTotalRef.current = orcamentoTotal;
+  }, [orcamentoTotal]);
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  useEffect(() => {
+    onMarketItemsRef.current = onMarketItems;
+  }, [onMarketItems]);
+
+  useEffect(() => {
+    historicoComprasRef.current = historicoCompras;
+  }, [historicoCompras]);
+
+  useEffect(() => {
+    categoriasPersonalizadasRef.current = categoriasPersonalizadas;
+  }, [categoriasPersonalizadas]);
+
+  useEffect(() => {
+    cicloAnoRef.current = cicloAno;
+  }, [cicloAno]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      let leituraConcluidaComSucesso = false;
       podeSalvarRef.current = false;
       setCarregandoDados(true);
 
@@ -278,7 +530,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
         setOnMarketItems(dadosIniciais.onMarketItems ?? []);
         setHistoricoCompras(dadosIniciais.historicoCompras ?? []);
         setCategoriasPersonalizadas(dadosIniciais.categoriasPersonalizadas ?? []);
-        setCicloAno(dadosIniciais.cicloAno ?? anoAtual);
+        setCicloAno(normalizarCicloAno());
         setCarregandoDados(false);
         return;
       }
@@ -286,6 +538,11 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
       usuarioAtualRef.current = user.uid;
       const perfilRef = usuarioDocRef(user.uid);
       const documentoRef = orcamentoDocRef(user.uid);
+      const backupLocal = await lerBackupLocal(user.uid);
+
+      if (backupLocal) {
+        aplicarDadosSalvos(normalizarDadosSalvos(backupLocal));
+      }
 
       try {
         const perfilSnapshot = await getDoc(perfilRef);
@@ -315,54 +572,39 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
         const snapshot = await getDoc(documentoRef);
 
         if (snapshot.exists()) {
-          const dados = snapshot.data() as Partial<DadosSalvos>;
-          const categoriasCustomizadas = normalizarCategoriasPersonalizadas(
-            dados.categoriasPersonalizadas
-          );
+          const dadosRemotos = normalizarDadosSalvos(snapshot.data() as Partial<DadosSalvos>);
+          const dadosLocais = backupLocal ? normalizarDadosSalvos(backupLocal) : null;
+          const usarDadosLocais =
+            !!dadosLocais &&
+            (dadosLocais.ultimaAtualizacaoLocal ?? 0) >
+              (dadosRemotos.ultimaAtualizacaoLocal ?? 0);
 
-          setOrcamentoTotal(typeof dados.orcamentoTotal === "number" ? dados.orcamentoTotal : 0);
-          setCategoriasPersonalizadas(categoriasCustomizadas);
-          setCicloAno(typeof dados.cicloAno === "number" ? dados.cicloAno : anoAtual);
-          setItems(
-            Array.isArray(dados.items)
-              ? dados.items.map((item) => normalizarItem(item as Item, categoriasCustomizadas))
-              : []
-          );
-          setOnMarketItems(
-            Array.isArray(dados.onMarketItems)
-              ? dados.onMarketItems.map((item) =>
-                  normalizarOnMarketItem(item as OnMarketItem, categoriasCustomizadas)
-                )
-              : []
-          );
-          setHistoricoCompras(
-            Array.isArray(dados.historicoCompras)
-              ? dados.historicoCompras.map((compra) =>
-                  normalizarCompraHistorico(compra as CompraHistorico, categoriasCustomizadas)
-                )
-              : []
-          );
+          const dadosEscolhidos = usarDadosLocais && dadosLocais ? dadosLocais : dadosRemotos;
+
+          aplicarDadosSalvos(dadosEscolhidos);
+
+          if (usarDadosLocais && dadosLocais) {
+            await salvarDadosUsuario(user.uid, dadosLocais);
+          }
+
+          leituraConcluidaComSucesso = true;
+        } else if (backupLocal) {
+          const dadosLocais = normalizarDadosSalvos(backupLocal);
+          aplicarDadosSalvos(dadosLocais);
+          await salvarDadosUsuario(user.uid, dadosLocais);
+          leituraConcluidaComSucesso = true;
         } else {
-          setOrcamentoTotal(0);
-          setItems([]);
-          setOnMarketItems([]);
-          setHistoricoCompras([]);
-          setCategoriasPersonalizadas([]);
-          setCicloAno(anoAtual);
-          await setDoc(documentoRef, {
+          aplicarDadosSalvos(dadosIniciais);
+          await salvarDadosUsuario(user.uid, {
             ...dadosIniciais,
-            atualizadoEm: serverTimestamp(),
+            ultimaAtualizacaoLocal: Date.now(),
           });
+          leituraConcluidaComSucesso = true;
         }
       } catch {
-        setOrcamentoTotal(0);
-        setItems([]);
-        setOnMarketItems([]);
-        setHistoricoCompras([]);
-        setCategoriasPersonalizadas([]);
-        setCicloAno(anoAtual);
+        // Se a leitura falhar, mantemos o estado atual e evitamos sobrescrever o Firestore com zeros.
       } finally {
-        podeSalvarRef.current = true;
+        podeSalvarRef.current = leituraConcluidaComSucesso;
         setCarregandoDados(false);
       }
     });
@@ -378,30 +620,14 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
     }
 
     const salvar = async () => {
-      try {
-        await setDoc(orcamentoDocRef(uid), {
-          orcamentoTotal,
-          items,
-          onMarketItems,
-          historicoCompras,
-          categoriasPersonalizadas,
-          cicloAno,
-          atualizadoEm: serverTimestamp(),
-        });
-      } catch {
-        return;
-      }
+      await salvarDadosUsuario(uid, montarDadosParaSalvar());
     };
 
     salvar();
   }, [
     carregandoDados,
-    categoriasPersonalizadas,
-    cicloAno,
-    historicoCompras,
-    items,
-    onMarketItems,
-    orcamentoTotal,
+    montarDadosParaSalvar,
+    salvarDadosUsuario,
   ]);
 
   const opcoesCategoria = useMemo(
@@ -449,8 +675,11 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
       orcamentoRestante,
       gastosPorCategoria,
       carregandoDados,
+      forcarSalvarDados,
       definirOrcamentoTotal: (valor) => {
+        orcamentoTotalRef.current = valor;
         setOrcamentoTotal(valor);
+        salvarEstadoAtualComOverrides({ orcamentoTotal: valor }).catch(() => undefined);
       },
       adicionarCategoriaPersonalizada: (nome, cor) => {
         const nomeNormalizado = normalizarNomeCategoria(nome);
@@ -467,10 +696,16 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
           return { sucesso: false, erro: "categoria-existente" };
         }
 
-        setCategoriasPersonalizadas((estadoAtual) => [
-          ...estadoAtual,
+        const proximasCategorias = [
+          ...categoriasPersonalizadasRef.current,
           { nome: nomeNormalizado, cor, personalizada: true },
-        ]);
+        ];
+
+        categoriasPersonalizadasRef.current = proximasCategorias;
+        setCategoriasPersonalizadas(proximasCategorias);
+        salvarEstadoAtualComOverrides({
+          categoriasPersonalizadas: proximasCategorias,
+        }).catch(() => undefined);
 
         return { sucesso: true, categoria: nomeNormalizado };
       },
@@ -484,76 +719,83 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
           return { sucesso: false, erro: "categoria-nao-encontrada" };
         }
 
-        const categoriaEmUso =
-          items.some((item) => item.categoria === nomeNormalizado) ||
-          onMarketItems.some((item) => item.categoria === nomeNormalizado) ||
-          historicoCompras.some((compra) =>
-            compra.items.some((item) => item.categoria === nomeNormalizado)
-          );
-
-        if (categoriaEmUso) {
-          return { sucesso: false, erro: "categoria-em-uso" };
-        }
-
-        setCategoriasPersonalizadas((estadoAtual) =>
-          estadoAtual.filter((categoria) => categoria.nome !== nomeNormalizado)
+        const proximasCategorias = categoriasPersonalizadasRef.current.filter(
+          (categoria) => categoria.nome !== nomeNormalizado
         );
+
+        categoriasPersonalizadasRef.current = proximasCategorias;
+        setCategoriasPersonalizadas(proximasCategorias);
+        salvarEstadoAtualComOverrides({
+          categoriasPersonalizadas: proximasCategorias,
+        }).catch(() => undefined);
 
         return { sucesso: true };
       },
       adicionarItem: (item) => {
-        setItems((estadoAtual) => [
-          ...estadoAtual,
-          normalizarItem(
-            {
-              ...item,
-              id: Date.now(),
-              cor: getCorCategoria(item.categoria, categoriasPersonalizadas),
-            },
-            categoriasPersonalizadas
-          ),
-        ]);
+        const novoItem = normalizarItem(
+          {
+            ...item,
+            id: Date.now(),
+            cor: getCorCategoria(item.categoria, categoriasPersonalizadasRef.current),
+          },
+          categoriasPersonalizadasRef.current
+        );
+        const proximosItems = [...itemsRef.current, novoItem];
+
+        itemsRef.current = proximosItems;
+        setItems(proximosItems);
+        salvarEstadoAtualComOverrides({ items: proximosItems }).catch(() => undefined);
       },
       adicionarOnMarketItem: (item) => {
-        setOnMarketItems((estadoAtual) => [
-          ...estadoAtual,
-          normalizarOnMarketItem(
-            {
-              ...item,
-              id: Date.now(),
-              cor: getCorCategoria(item.categoria, categoriasPersonalizadas),
-            },
-            categoriasPersonalizadas
-          ),
-        ]);
+        const novoItem = normalizarOnMarketItem(
+          {
+            ...item,
+            id: Date.now(),
+            cor: getCorCategoria(item.categoria, categoriasPersonalizadasRef.current),
+          },
+          categoriasPersonalizadasRef.current
+        );
+        const proximosItens = [...onMarketItemsRef.current, novoItem];
+
+        onMarketItemsRef.current = proximosItens;
+        setOnMarketItems(proximosItens);
+        salvarEstadoAtualComOverrides({
+          onMarketItems: proximosItens,
+        }).catch(() => undefined);
       },
       concluirOnMarketItem: (id, valorUnitario) => {
         if (valorUnitario <= 0) {
           return;
         }
 
-        setOnMarketItems((estadoAtual) => {
-          const itemConcluido = estadoAtual.find((item) => item.id === id);
+        const itemConcluido = onMarketItemsRef.current.find((item) => item.id === id);
 
-          if (!itemConcluido) {
-            return estadoAtual;
-          }
+        if (!itemConcluido) {
+          return;
+        }
 
-          setItems((itensAtuais) => [
-            ...itensAtuais,
-            normalizarItem(
-              {
-                ...itemConcluido,
-                valorUnitario,
-              },
-              categoriasPersonalizadas
-            ),
-          ]);
+        const proximosOnMarketItems = onMarketItemsRef.current.filter((item) => item.id !== id);
+        const proximosItems = [
+          ...itemsRef.current,
+          normalizarItem(
+            {
+              ...itemConcluido,
+              valorUnitario,
+            },
+            categoriasPersonalizadasRef.current
+          ),
+        ];
 
-          return estadoAtual.filter((item) => item.id !== id);
-        });
+        onMarketItemsRef.current = proximosOnMarketItems;
+        itemsRef.current = proximosItems;
+        setOnMarketItems(proximosOnMarketItems);
+        setItems(proximosItems);
+        salvarEstadoAtualComOverrides({
+          items: proximosItems,
+          onMarketItems: proximosOnMarketItems,
+        }).catch(() => undefined);
       },
-      finalizarCompra: ({ nome, data, fotoNotaUri }) => {
+      finalizarCompra: async ({ nome, data, fotoNotaUri, completedBy }) => {
         if (!nome.trim()) {
           return { sucesso: false, erro: "nome-vazio" };
         }
@@ -566,15 +808,26 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
           return { sucesso: false, erro: "sem-itens" };
         }
 
+        const completedByNormalizado =
+          typeof completedBy === "string" ? completedBy.trim() : "";
+
+        if (completedBy !== undefined && completedBy !== null && !completedByNormalizado) {
+          return { sucesso: false, erro: "comprador-vazio" };
+        }
+
         const totalGasto = items.reduce((total, item) => total + calcularValorItem(item), 0);
         const diaDoMes = Number(data.split("-")[2] ?? "1");
         const gastoPorCategoria = criarResumoCategorias(items, categoriasPersonalizadas);
+        const agora = new Date();
 
         const compra: CompraHistorico = {
           id: Date.now(),
           nome: nome.trim(),
           data,
           fotoNotaUri: fotoNotaUri ?? null,
+          completedBy: completedByNormalizado || null,
+          completedAt: agora,
+          createdAt: agora,
           items,
           totalGasto,
           mediaDiaria: diaDoMes > 0 ? totalGasto / diaDoMes : totalGasto,
@@ -582,41 +835,59 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
           gastoPorCategoria,
         };
 
-        setHistoricoCompras((estadoAtual) => [compra, ...estadoAtual]);
+        const historicoAtualizado = [compra, ...historicoCompras];
+
+        historicoComprasRef.current = historicoAtualizado;
+        itemsRef.current = [];
+        setHistoricoCompras(historicoAtualizado);
         setItems([]);
+        await salvarDadosUsuario(usuarioAtualRef.current ?? "", {
+          orcamentoTotal,
+          items: [],
+          onMarketItems,
+          historicoCompras: historicoAtualizado,
+          categoriasPersonalizadas,
+          cicloAno,
+          ultimaAtualizacaoLocal: Date.now(),
+        });
 
         return { sucesso: true };
       },
       iniciarNovoCiclo: (ano) => {
-        setCicloAno(ano);
+        setCicloAno(normalizarCicloAno());
         setHistoricoCompras([]);
         setItems([]);
         setOnMarketItems([]);
       },
       buscarCompraPorId: (id) => historicoCompras.find((compra) => compra.id === id),
       deletarItem: (id) => {
-        setItems((estadoAtual) => estadoAtual.filter((item) => item.id !== id));
+        const proximosItems = itemsRef.current.filter((item) => item.id !== id);
+        itemsRef.current = proximosItems;
+        setItems(proximosItems);
+        salvarEstadoAtualComOverrides({ items: proximosItems }).catch(() => undefined);
       },
       incrementarQuantidade: (id) => {
-        setItems((estadoAtual) =>
-          estadoAtual.map((item) =>
-            item.id === id ? { ...item, quantidade: item.quantidade + 1 } : item
-          )
+        const proximosItems = itemsRef.current.map((item) =>
+          item.id === id ? { ...item, quantidade: item.quantidade + 1 } : item
         );
+        itemsRef.current = proximosItems;
+        setItems(proximosItems);
+        salvarEstadoAtualComOverrides({ items: proximosItems }).catch(() => undefined);
       },
       decrementarQuantidade: (id) => {
-        setItems((estadoAtual) =>
-          estadoAtual.map((item) => {
-            if (item.id !== id) {
-              return item;
-            }
+        const proximosItems = itemsRef.current.map((item) => {
+          if (item.id !== id) {
+            return item;
+          }
 
-            return {
-              ...item,
-              quantidade: Math.max(0, item.quantidade - 1),
-            };
-          })
-        );
+          return {
+            ...item,
+            quantidade: Math.max(0, item.quantidade - 1),
+          };
+        });
+        itemsRef.current = proximosItems;
+        setItems(proximosItems);
+        salvarEstadoAtualComOverrides({ items: proximosItems }).catch(() => undefined);
       },
       listarItensPorCategoria: (categoria) =>
         items.filter((item) => item.categoria === categoria && item.quantidade > 0),
@@ -630,6 +901,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
       categorias,
       categoriasPersonalizadas,
       cicloAno,
+      forcarSalvarDados,
       gastosPorCategoria,
       historicoCompras,
       items,
@@ -637,6 +909,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
       opcoesCategoria,
       orcamentoRestante,
       orcamentoTotal,
+      salvarEstadoAtualComOverrides,
       valorGasto,
     ]
   );
