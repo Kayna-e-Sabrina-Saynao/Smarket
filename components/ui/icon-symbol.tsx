@@ -20,6 +20,7 @@ const MAPPING = {
   'rectangle.portrait.and.arrow.right': 'logout',
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
+  'chevron.left': 'chevron-left',
   'chevron.right': 'chevron-right',
   'questionmark.circle.fill': 'help',
   'gearshape.fill': 'settings',

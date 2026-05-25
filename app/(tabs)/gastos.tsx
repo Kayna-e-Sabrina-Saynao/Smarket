@@ -147,6 +147,64 @@ export default function Gastos() {
     );
   }
 
+  if (carregandoDados) {
+    return (
+      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+        <View style={styles.loadingCard}>
+          <Text style={styles.loadingText}>Carregando gastos...</Text>
+        </View>
+      </LinearGradient>
+    );
+  }
+
+  if (listaSelecionada) {
+    return (
+      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <BackButton
+            fallback="/(tabs)/gastos"
+            light
+            onPress={() => setListaSelecionada(null)}
+            style={styles.backButton}
+          />
+
+          <View style={styles.card}>
+            <Text style={styles.title}>{listaSelecionada.nome}</Text>
+            <Text style={styles.subtitle}>{formatarData(listaSelecionada.data)}</Text>
+            <Text style={styles.value}>{formatarMoeda(listaSelecionada.totais.totalFinal)}</Text>
+
+            {listaSelecionada.notaFiscalImage ? (
+              <Image
+                source={{ uri: listaSelecionada.notaFiscalImage }}
+                style={styles.receiptImage}
+                contentFit="cover"
+              />
+            ) : null}
+
+            {listaSelecionada.categorias.map((categoria) => (
+              <View key={categoria} style={styles.detailSection}>
+                <Text style={styles.detailTitle}>{categoria}</Text>
+                {listaSelecionada.produtos
+                  .filter((produto) => produto.categoria === categoria)
+                  .map((produto) => (
+                    <View key={produto.id} style={styles.detailItem}>
+                      <View>
+                        <Text style={styles.itemName}>{produto.nome}</Text>
+                        <Text style={styles.itemMeta}>
+                          {produto.quantidade} x {formatarMoeda(produto.valorUnitario ?? 0)}
+                        </Text>
+                      </View>
+                      <Text style={styles.itemValue}>{formatarMoeda(produto.subtotal ?? 0)}</Text>
+                    </View>
+                  ))}
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      </LinearGradient>
+    );
+  }
+
   return (
     <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -258,26 +316,20 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "#e9eceb",
-    margin: 20,
-    marginTop: 40,
-    padding: 25,
-    borderRadius: 25,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    padding: 22,
+    borderRadius: 26,
+    gap: 8,
+  },
+  headerIcon: {
+    alignItems: "center",
   },
   headerIcon: {
     alignItems: "center",
     marginBottom: 10,
   },
   title: {
-    fontSize: 22,
-    fontWeight: "bold",
+    fontSize: 24,
+    fontWeight: "900",
     textAlign: "center",
     color: "#2f5d45",
   },
@@ -334,14 +386,13 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   listTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
     color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
   },
   listSubtitle: {
     fontSize: 12,
-    color: "#d3dcd7",
-    marginTop: 2,
+    marginTop: 3,
   },
   emptyCard: {
     backgroundColor: "#e9eceb",
