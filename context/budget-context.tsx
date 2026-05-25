@@ -1,16 +1,8 @@
 import { onAuthStateChanged } from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  doc,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-} from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
+  useCallback,
   createContext,
   ReactNode,
   useContext,
@@ -22,475 +14,902 @@ import React, {
 
 import { auth, db } from "../firebaseConfig";
 
-export type Categoria = "Mercado" | "Frios" | "Limpeza" | "Pets";
-export type StatusProduto = "pendente" | "concluido";
-export type StatusLista = "on_market" | "finalizada";
+export const CATEGORIAS_PADRAO = [
+  "Mercado",
+  "Frios",
+  "Limpeza",
+  "Pets",
+  "Outros",
+  "Hortifruti",
+  "Higiene",
+  "Padaria",
+] as const;
 
-export type ProdutoCompra = {
+export type Categoria = string;
+
+export type CategoriaOpcao = {
+  nome: string;
+  cor: string;
+  personalizada?: boolean;
+};
+
+export type Item = {
   id: number;
   nome: string;
-  categoria: Categoria;
-  quantidade: number;
   cor: string;
-  status: StatusProduto;
-  valorUnitario?: number;
-  subtotal?: number;
-  compradoEm?: string;
+  quantidade: number;
+  categoria: Categoria;
+  valorUnitario: number;
 };
 
-export type ListaCompra = {
-  id: string;
+export type OnMarketItem = Omit<Item, "valorUnitario">;
+
+export type GastoCategoria = {
   nome: string;
-  data: string;
-  status: StatusLista;
-  produtos: ProdutoCompra[];
-  categorias: Categoria[];
-  valores: {
-    total: number;
-    quantidadeProdutos: number;
-  };
-  totais: {
-    totalFinal: number;
-    porCategoria: Record<string, number>;
-  };
-  notaFiscalImage?: string | null;
-  criadaEm?: unknown;
-  atualizadaEm?: unknown;
-  finalizadaEm?: unknown;
-};
-
-type NovoItem = Pick<ProdutoCompra, "nome" | "categoria" | "quantidade">;
-
-type GastoCategoria = {
-  nome: Categoria;
   valor: number;
   percentual: number;
   cor: string;
   quantidadeItens: number;
 };
 
+export type CompraHistorico = {
+  id: number;
+  nome: string;
+  data: string;
+  fotoNotaUri?: string | null;
+  completedBy?: string | null;
+  completedAt?: Date | null;
+  createdAt?: Date | null;
+  items: Item[];
+  totalGasto: number;
+  mediaDiaria: number;
+  categoriasAtivas: number;
+  gastoPorCategoria: GastoCategoria[];
+};
+
+type NovoItem = Omit<Item, "id" | "cor">;
+type NovoOnMarketItem = Omit<OnMarketItem, "id" | "cor">;
+
 type BudgetContextValue = {
-  categorias: Categoria[];
-  items: ProdutoCompra[];
-  listaAtiva: ListaCompra | null;
-  listasFinalizadas: ListaCompra[];
+  categorias: string[];
+  opcoesCategoria: CategoriaOpcao[];
+  items: Item[];
+  onMarketItems: OnMarketItem[];
+  historicoCompras: CompraHistorico[];
+  cicloAno: number;
   orcamentoTotal: number;
   valorGasto: number;
   orcamentoRestante: number;
   gastosPorCategoria: GastoCategoria[];
   carregandoDados: boolean;
+  forcarSalvarDados: () => Promise<void>;
   definirOrcamentoTotal: (valor: number) => void;
-  adicionarItem: (item: NovoItem) => Promise<void>;
-  deletarItem: (id: number) => Promise<void>;
-  incrementarQuantidade: (id: number) => Promise<void>;
-  decrementarQuantidade: (id: number) => Promise<void>;
-  definirQuantidade: (id: number, quantidade: number) => Promise<void>;
-  concluirProduto: (id: number, valorUnitario: number) => Promise<void>;
-  reabrirProduto: (id: number) => Promise<void>;
-  finalizarLista: (nome?: string) => Promise<void>;
-  listarItensPorCategoria: (categoria: Categoria) => ProdutoCompra[];
-  totalCategoria: (categoria: Categoria) => number;
+  adicionarItem: (item: NovoItem) => void;
+  adicionarOnMarketItem: (item: NovoOnMarketItem) => void;
+  concluirOnMarketItem: (id: number, valorUnitario: number) => void;
+  finalizarCompra: (dados: {
+    nome: string;
+    data: string;
+    fotoNotaUri?: string | null;
+    completedBy?: string | null;
+  }) => Promise<{
+    sucesso: boolean;
+    erro?: "sem-itens" | "nome-vazio" | "data-vazia" | "comprador-vazio";
+  }>;
+  iniciarNovoCiclo: (ano: number) => void;
+  buscarCompraPorId: (id: number) => CompraHistorico | undefined;
+  adicionarCategoriaPersonalizada: (nome: string, cor: string) => {
+    sucesso: boolean;
+    categoria?: string;
+    erro?: "nome-vazio" | "categoria-existente";
+  };
+  removerCategoriaPersonalizada: (nome: string) => {
+    sucesso: boolean;
+    erro?: "categoria-nao-encontrada";
+  };
+  deletarItem: (id: number) => void;
+  incrementarQuantidade: (id: number) => void;
+  decrementarQuantidade: (id: number) => void;
+  listarItensPorCategoria: (categoria: string) => Item[];
+  totalCategoria: (categoria: string) => number;
 };
 
-type BudgetDoc = {
-  orcamentoTotal?: number;
+type DadosSalvos = {
+  orcamentoTotal: number;
+  items: Item[];
+  onMarketItems?: OnMarketItem[];
+  historicoCompras?: CompraHistorico[];
+  categoriasPersonalizadas?: CategoriaOpcao[];
+  cicloAno?: number;
+  ultimaAtualizacaoLocal?: number;
 };
 
-const categorias: Categoria[] = ["Mercado", "Frios", "Limpeza", "Pets"];
-const corCategoria: Record<Categoria, string> = {
-  Mercado: "#f2c94c",
-  Frios: "#6c5ce7",
-  Limpeza: "#2f9e72",
-  Pets: "#e17055",
+const categoriasPadrao: CategoriaOpcao[] = [
+  { nome: "Mercado", cor: "#f2c94c" },
+  { nome: "Frios", cor: "#6c5ce7" },
+  { nome: "Limpeza", cor: "#7c6df2" },
+  { nome: "Pets", cor: "#e17055" },
+  { nome: "Outros", cor: "#8e9aaf" },
+  { nome: "Hortifruti", cor: "#27ae60" },
+  { nome: "Higiene", cor: "#ff8fab" },
+  { nome: "Padaria", cor: "#d4a373" },
+];
+
+const ANO_FIXO_CICLO = 2026;
+const normalizarCicloAno = () => ANO_FIXO_CICLO;
+const chaveBackupLocal = (uid: string) => `smarket:orcamento:${uid}`;
+
+const dadosIniciais: DadosSalvos = {
+  orcamentoTotal: 0,
+  items: [],
+  onMarketItems: [],
+  historicoCompras: [],
+  categoriasPersonalizadas: [],
+  cicloAno: normalizarCicloAno(),
+  ultimaAtualizacaoLocal: 0,
 };
 
 const BudgetContext = createContext<BudgetContextValue | undefined>(undefined);
 
-const usuarioDocRef = (uid: string) => doc(db, "users", uid);
-const budgetDocRef = (uid: string) => doc(db, "users", uid, "budget", "current");
-const shoppingListsRef = (uid: string) => collection(db, "users", uid, "shoppingLists");
+const calcularValorItem = (item: Pick<Item, "quantidade" | "valorUnitario">) =>
+  item.quantidade * item.valorUnitario;
 
-const calcularTotais = (produtos: ProdutoCompra[]) => {
-  const produtosComprados = produtos.filter((produto) => produto.status === "concluido");
-  const porCategoria = produtosComprados.reduce<Record<string, number>>((acc, produto) => {
-    acc[produto.categoria] = (acc[produto.categoria] ?? 0) + (produto.subtotal ?? 0);
-    return acc;
-  }, {});
-  const totalFinal = produtosComprados.reduce((total, produto) => total + (produto.subtotal ?? 0), 0);
+const normalizarNomeCategoria = (nome: string) => nome.trim();
 
-  return {
-    categorias: Array.from(new Set(produtos.map((produto) => produto.categoria))),
-    valores: {
-      total: totalFinal,
-      quantidadeProdutos: produtos.reduce((total, produto) => total + produto.quantidade, 0),
-    },
-    totais: {
-      totalFinal,
-      porCategoria,
-    },
-  };
+const normalizarCampoData = (valor: unknown): Date | null => {
+  if (valor instanceof Date) {
+    return valor;
+  }
+
+  if (
+    typeof valor === "object" &&
+    valor !== null &&
+    "toDate" in valor &&
+    typeof (valor as { toDate: () => Date }).toDate === "function"
+  ) {
+    return (valor as { toDate: () => Date }).toDate();
+  }
+
+  if (typeof valor === "string" || typeof valor === "number") {
+    const data = new Date(valor);
+
+    if (!Number.isNaN(data.getTime())) {
+      return data;
+    }
+  }
+
+  return null;
 };
 
-const normalizarProduto = (produto: Partial<ProdutoCompra>): ProdutoCompra => {
-  const categoria = (produto.categoria ?? "Mercado") as Categoria;
-  const produtoNormalizado: ProdutoCompra = {
-    id: typeof produto.id === "number" ? produto.id : Date.now(),
-    nome: produto.nome ?? "",
-    categoria,
-    quantidade: typeof produto.quantidade === "number" ? produto.quantidade : 1,
-    cor: produto.cor ?? corCategoria[categoria],
-    status: produto.status ?? "pendente",
-  };
+const getCorCategoria = (categoria: string, categoriasPersonalizadas: CategoriaOpcao[]) => {
+  const categoriaPadrao = categoriasPadrao.find((item) => item.nome === categoria);
 
-  if (typeof produto.valorUnitario === "number") {
-    produtoNormalizado.valorUnitario = produto.valorUnitario;
+  if (categoriaPadrao) {
+    return categoriaPadrao.cor;
   }
 
-  if (typeof produto.subtotal === "number") {
-    produtoNormalizado.subtotal = produto.subtotal;
-  }
-
-  if (produto.compradoEm) {
-    produtoNormalizado.compradoEm = produto.compradoEm;
-  }
-
-  return produtoNormalizado;
+  const categoriaCustomizada = categoriasPersonalizadas.find((item) => item.nome === categoria);
+  return categoriaCustomizada?.cor ?? "#5f6f66";
 };
 
-const normalizarLista = (id: string, dados: Partial<ListaCompra>): ListaCompra => {
-  const produtos = Array.isArray(dados.produtos)
-    ? dados.produtos.map((produto) => normalizarProduto(produto))
+const normalizarCategoriaPersonalizada = (categoria: CategoriaOpcao): CategoriaOpcao => ({
+  nome: normalizarNomeCategoria(categoria.nome),
+  cor: categoria.cor,
+  personalizada: true,
+});
+
+const normalizarCategoriasPersonalizadas = (
+  categoriasPersonalizadas: CategoriaOpcao[] | undefined
+) =>
+  Array.isArray(categoriasPersonalizadas)
+    ? categoriasPersonalizadas
+        .map((categoria) => normalizarCategoriaPersonalizada(categoria))
+        .filter((categoria) => categoria.nome.length > 0)
     : [];
-  const totaisCalculados = calcularTotais(produtos);
+
+const normalizarItem = (item: Item, categoriasPersonalizadas: CategoriaOpcao[]): Item => {
+  const categoria = normalizarNomeCategoria(item.categoria);
+  const corCategoria = getCorCategoria(categoria, categoriasPersonalizadas);
 
   return {
-    id,
-    nome: dados.nome ?? "Lista do mercado",
-    data: dados.data ?? new Date().toISOString(),
-    status: dados.status ?? "on_market",
-    produtos,
-    categorias: dados.categorias ?? totaisCalculados.categorias,
-    valores: dados.valores ?? totaisCalculados.valores,
-    totais: dados.totais ?? totaisCalculados.totais,
-    notaFiscalImage: dados.notaFiscalImage ?? null,
-    criadaEm: dados.criadaEm,
-    atualizadaEm: dados.atualizadaEm,
-    finalizadaEm: dados.finalizadaEm,
+    ...item,
+    categoria,
+    cor: corCategoria === "#5f6f66" && item.cor ? item.cor : corCategoria,
+  };
+};
+
+const normalizarOnMarketItem = (
+  item: OnMarketItem,
+  categoriasPersonalizadas: CategoriaOpcao[]
+): OnMarketItem => {
+  const categoria = normalizarNomeCategoria(item.categoria);
+  const corCategoria = getCorCategoria(categoria, categoriasPersonalizadas);
+
+  return {
+    ...item,
+    categoria,
+    cor: corCategoria === "#5f6f66" && item.cor ? item.cor : corCategoria,
+  };
+};
+
+const criarResumoCategorias = (
+  items: Item[],
+  categoriasPersonalizadas: CategoriaOpcao[]
+): GastoCategoria[] => {
+  const valorTotal = items.reduce((total, item) => total + calcularValorItem(item), 0);
+  const categoriasAtivas = Array.from(new Set(items.map((item) => item.categoria)));
+
+  return categoriasAtivas
+    .map((categoria) => {
+      const itensDaCategoria = items.filter((item) => item.categoria === categoria);
+      const valor = itensDaCategoria.reduce((total, item) => total + calcularValorItem(item), 0);
+      const quantidadeItens = itensDaCategoria.reduce(
+        (total, item) => total + item.quantidade,
+        0
+      );
+
+      return {
+        nome: categoria,
+        valor,
+        percentual: valorTotal === 0 ? 0 : (valor / valorTotal) * 100,
+        cor: getCorCategoria(categoria, categoriasPersonalizadas),
+        quantidadeItens,
+      };
+    })
+    .sort((a, b) => b.valor - a.valor);
+};
+
+const normalizarCompraHistorico = (
+  compra: CompraHistorico,
+  categoriasPersonalizadas: CategoriaOpcao[]
+): CompraHistorico => {
+  const items = Array.isArray(compra.items)
+    ? compra.items.map((item) => normalizarItem(item, categoriasPersonalizadas))
+    : [];
+
+  return {
+    ...compra,
+    fotoNotaUri: compra.fotoNotaUri ?? null,
+    completedBy:
+      typeof compra.completedBy === "string" && compra.completedBy.trim().length > 0
+        ? compra.completedBy.trim()
+        : null,
+    completedAt: normalizarCampoData(compra.completedAt),
+    createdAt: normalizarCampoData(compra.createdAt),
+    items,
+    totalGasto:
+      typeof compra.totalGasto === "number"
+        ? compra.totalGasto
+        : items.reduce((total, item) => total + calcularValorItem(item), 0),
+    mediaDiaria:
+      typeof compra.mediaDiaria === "number" ? compra.mediaDiaria : 0,
+    categoriasAtivas:
+      typeof compra.categoriasAtivas === "number"
+        ? compra.categoriasAtivas
+        : new Set(items.map((item) => item.categoria)).size,
+    gastoPorCategoria:
+      Array.isArray(compra.gastoPorCategoria) && compra.gastoPorCategoria.length > 0
+        ? compra.gastoPorCategoria
+        : criarResumoCategorias(items, categoriasPersonalizadas),
+  };
+};
+
+const usuarioDocRef = (uid: string) => doc(db, "usuarios", uid);
+const orcamentoDocRef = (uid: string) => doc(db, "usuarios", uid, "orcamento", "atual");
+
+const lerBackupLocalStorage = (uid: string): DadosSalvos | null => {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return null;
+    }
+
+    const dados = window.localStorage.getItem(chaveBackupLocal(uid));
+
+    if (!dados) {
+      return null;
+    }
+
+    return JSON.parse(dados) as DadosSalvos;
+  } catch {
+    return null;
+  }
+};
+
+const salvarBackupLocalStorage = (uid: string, dados: DadosSalvos) => {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return;
+    }
+
+    window.localStorage.setItem(chaveBackupLocal(uid), JSON.stringify(dados));
+  } catch {
+    return;
+  }
+};
+
+const lerBackupLocal = async (uid: string): Promise<DadosSalvos | null> => {
+  const backupLocalStorage = lerBackupLocalStorage(uid);
+
+  if (backupLocalStorage) {
+    return backupLocalStorage;
+  }
+
+  try {
+    const dados = await AsyncStorage.getItem(chaveBackupLocal(uid));
+
+    if (!dados) {
+      return null;
+    }
+
+    return JSON.parse(dados) as DadosSalvos;
+  } catch {
+    return null;
+  }
+};
+
+const salvarBackupLocal = async (uid: string, dados: DadosSalvos) => {
+  salvarBackupLocalStorage(uid, dados);
+
+  try {
+    await AsyncStorage.setItem(chaveBackupLocal(uid), JSON.stringify(dados));
+  } catch {
+    return;
+  }
+};
+
+const normalizarDadosSalvos = (dados: Partial<DadosSalvos>): DadosSalvos => {
+  const categoriasCustomizadas = normalizarCategoriasPersonalizadas(
+    dados.categoriasPersonalizadas
+  );
+
+  return {
+    orcamentoTotal: typeof dados.orcamentoTotal === "number" ? dados.orcamentoTotal : 0,
+    categoriasPersonalizadas: categoriasCustomizadas,
+    cicloAno: normalizarCicloAno(),
+    items: Array.isArray(dados.items)
+      ? dados.items.map((item) => normalizarItem(item as Item, categoriasCustomizadas))
+      : [],
+    onMarketItems: Array.isArray(dados.onMarketItems)
+      ? dados.onMarketItems.map((item) =>
+          normalizarOnMarketItem(item as OnMarketItem, categoriasCustomizadas)
+        )
+      : [],
+    historicoCompras: Array.isArray(dados.historicoCompras)
+      ? dados.historicoCompras.map((compra) =>
+          normalizarCompraHistorico(compra as CompraHistorico, categoriasCustomizadas)
+        )
+      : [],
+    ultimaAtualizacaoLocal:
+      typeof dados.ultimaAtualizacaoLocal === "number" ? dados.ultimaAtualizacaoLocal : 0,
   };
 };
 
 export function BudgetProvider({ children }: { children: ReactNode }) {
   const [orcamentoTotal, setOrcamentoTotal] = useState(0);
-  const [listas, setListas] = useState<ListaCompra[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+  const [onMarketItems, setOnMarketItems] = useState<OnMarketItem[]>([]);
+  const [historicoCompras, setHistoricoCompras] = useState<CompraHistorico[]>([]);
+  const [categoriasPersonalizadas, setCategoriasPersonalizadas] = useState<CategoriaOpcao[]>([]);
+  const [cicloAno, setCicloAno] = useState(ANO_FIXO_CICLO);
   const [carregandoDados, setCarregandoDados] = useState(true);
   const usuarioAtualRef = useRef<string | null>(null);
-  const listaAtivaRef = useRef<ListaCompra | null>(null);
+  const podeSalvarRef = useRef(false);
+  const orcamentoTotalRef = useRef(0);
+  const itemsRef = useRef<Item[]>([]);
+  const onMarketItemsRef = useRef<OnMarketItem[]>([]);
+  const historicoComprasRef = useRef<CompraHistorico[]>([]);
+  const categoriasPersonalizadasRef = useRef<CategoriaOpcao[]>([]);
+  const cicloAnoRef = useRef(ANO_FIXO_CICLO);
 
-  const listasFinalizadas = useMemo(
-    () => listas.filter((lista) => lista.status === "finalizada"),
-    [listas]
+  const salvarDadosUsuario = useCallback(async (uid: string, dadosParaSalvar: DadosSalvos) => {
+    if (!uid) {
+      return;
+    }
+
+    await salvarBackupLocal(uid, dadosParaSalvar);
+
+    try {
+      await setDoc(orcamentoDocRef(uid), {
+        ...dadosParaSalvar,
+        atualizadoEm: serverTimestamp(),
+      });
+    } catch {
+      return;
+    }
+  }, []);
+
+  const salvarEstadoAtualComOverrides = useCallback(
+    async (overrides?: Partial<DadosSalvos>) => {
+      const uid = usuarioAtualRef.current;
+
+      if (!uid) {
+        return;
+      }
+
+      const dadosParaSalvar = {
+        orcamentoTotal: overrides?.orcamentoTotal ?? orcamentoTotalRef.current,
+        items: overrides?.items ?? itemsRef.current,
+        onMarketItems: overrides?.onMarketItems ?? onMarketItemsRef.current,
+        historicoCompras: overrides?.historicoCompras ?? historicoComprasRef.current,
+        categoriasPersonalizadas:
+          overrides?.categoriasPersonalizadas ?? categoriasPersonalizadasRef.current,
+        cicloAno: overrides?.cicloAno ?? cicloAnoRef.current,
+        ultimaAtualizacaoLocal: Date.now(),
+      };
+
+      await salvarBackupLocal(uid, dadosParaSalvar);
+
+      if (!podeSalvarRef.current) {
+        return;
+      }
+
+      await salvarDadosUsuario(uid, dadosParaSalvar);
+    },
+    [salvarDadosUsuario]
   );
-  const listaAtiva = useMemo(
-    () => listas.find((lista) => lista.status === "on_market") ?? null,
-    [listas]
+
+  const montarDadosParaSalvar = useCallback(
+    (): DadosSalvos => ({
+      orcamentoTotal,
+      items,
+      onMarketItems,
+      historicoCompras,
+      categoriasPersonalizadas,
+      cicloAno,
+      ultimaAtualizacaoLocal: Date.now(),
+    }),
+    [
+      categoriasPersonalizadas,
+      cicloAno,
+      historicoCompras,
+      items,
+      onMarketItems,
+      orcamentoTotal,
+    ]
   );
+
+  const forcarSalvarDados = useCallback(async () => {
+    const uid = usuarioAtualRef.current;
+
+    if (!uid) {
+      return;
+    }
+
+    await salvarDadosUsuario(uid, montarDadosParaSalvar());
+  }, [montarDadosParaSalvar, salvarDadosUsuario]);
+
+  const aplicarDadosSalvos = (dados: DadosSalvos) => {
+    orcamentoTotalRef.current = dados.orcamentoTotal;
+    itemsRef.current = dados.items;
+    onMarketItemsRef.current = dados.onMarketItems ?? [];
+    historicoComprasRef.current = dados.historicoCompras ?? [];
+    categoriasPersonalizadasRef.current = dados.categoriasPersonalizadas ?? [];
+    cicloAnoRef.current = normalizarCicloAno();
+    setOrcamentoTotal(dados.orcamentoTotal);
+    setItems(dados.items);
+    setOnMarketItems(dados.onMarketItems ?? []);
+    setHistoricoCompras(dados.historicoCompras ?? []);
+    setCategoriasPersonalizadas(dados.categoriasPersonalizadas ?? []);
+    setCicloAno(normalizarCicloAno());
+  };
 
   useEffect(() => {
-    listaAtivaRef.current = listaAtiva;
-  }, [listaAtiva]);
+    orcamentoTotalRef.current = orcamentoTotal;
+  }, [orcamentoTotal]);
 
   useEffect(() => {
-    let unsubscribeBudget: (() => void) | undefined;
-    let unsubscribeLists: (() => void) | undefined;
+    itemsRef.current = items;
+  }, [items]);
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      unsubscribeBudget?.();
-      unsubscribeLists?.();
+  useEffect(() => {
+    onMarketItemsRef.current = onMarketItems;
+  }, [onMarketItems]);
+
+  useEffect(() => {
+    historicoComprasRef.current = historicoCompras;
+  }, [historicoCompras]);
+
+  useEffect(() => {
+    categoriasPersonalizadasRef.current = categoriasPersonalizadas;
+  }, [categoriasPersonalizadas]);
+
+  useEffect(() => {
+    cicloAnoRef.current = cicloAno;
+  }, [cicloAno]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      let leituraConcluidaComSucesso = false;
+      podeSalvarRef.current = false;
       setCarregandoDados(true);
 
       if (!user) {
         usuarioAtualRef.current = null;
-        listaAtivaRef.current = null;
-        setOrcamentoTotal(0);
-        setListas([]);
+        setOrcamentoTotal(dadosIniciais.orcamentoTotal);
+        setItems(dadosIniciais.items);
+        setOnMarketItems(dadosIniciais.onMarketItems ?? []);
+        setHistoricoCompras(dadosIniciais.historicoCompras ?? []);
+        setCategoriasPersonalizadas(dadosIniciais.categoriasPersonalizadas ?? []);
+        setCicloAno(normalizarCicloAno());
         setCarregandoDados(false);
         return;
       }
 
       usuarioAtualRef.current = user.uid;
+      const perfilRef = usuarioDocRef(user.uid);
+      const documentoRef = orcamentoDocRef(user.uid);
+      const backupLocal = await lerBackupLocal(user.uid);
 
-      await setDoc(
-        usuarioDocRef(user.uid),
-        {
-          email: user.email ?? "",
-          perfil: "padrao",
-          atualizadoEm: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      if (backupLocal) {
+        aplicarDadosSalvos(normalizarDadosSalvos(backupLocal));
+      }
 
-      unsubscribeBudget = onSnapshot(budgetDocRef(user.uid), (snapshot) => {
-        const dados = snapshot.data() as BudgetDoc | undefined;
-        setOrcamentoTotal(typeof dados?.orcamentoTotal === "number" ? dados.orcamentoTotal : 0);
-      });
+      try {
+        const perfilSnapshot = await getDoc(perfilRef);
 
-      unsubscribeLists = onSnapshot(
-        query(shoppingListsRef(user.uid), orderBy("data", "desc")),
-        (snapshot) => {
-          setListas(
-            snapshot.docs.map((documento) =>
-              normalizarLista(documento.id, documento.data() as Partial<ListaCompra>)
-            )
+        if (!perfilSnapshot.exists()) {
+          await setDoc(
+            perfilRef,
+            {
+              email: user.email ?? "",
+              perfil: "padrao",
+              criadoEm: serverTimestamp(),
+              atualizadoEm: serverTimestamp(),
+            },
+            { merge: true }
           );
-          setCarregandoDados(false);
-        },
-        () => {
-          setListas([]);
-          setCarregandoDados(false);
+        } else {
+          await setDoc(
+            perfilRef,
+            {
+              email: user.email ?? "",
+              atualizadoEm: serverTimestamp(),
+            },
+            { merge: true }
+          );
         }
-      );
+
+        const snapshot = await getDoc(documentoRef);
+
+        if (snapshot.exists()) {
+          const dadosRemotos = normalizarDadosSalvos(snapshot.data() as Partial<DadosSalvos>);
+          const dadosLocais = backupLocal ? normalizarDadosSalvos(backupLocal) : null;
+          const usarDadosLocais =
+            !!dadosLocais &&
+            (dadosLocais.ultimaAtualizacaoLocal ?? 0) >
+              (dadosRemotos.ultimaAtualizacaoLocal ?? 0);
+
+          const dadosEscolhidos = usarDadosLocais && dadosLocais ? dadosLocais : dadosRemotos;
+
+          aplicarDadosSalvos(dadosEscolhidos);
+
+          if (usarDadosLocais && dadosLocais) {
+            await salvarDadosUsuario(user.uid, dadosLocais);
+          }
+
+          leituraConcluidaComSucesso = true;
+        } else if (backupLocal) {
+          const dadosLocais = normalizarDadosSalvos(backupLocal);
+          aplicarDadosSalvos(dadosLocais);
+          await salvarDadosUsuario(user.uid, dadosLocais);
+          leituraConcluidaComSucesso = true;
+        } else {
+          aplicarDadosSalvos(dadosIniciais);
+          await salvarDadosUsuario(user.uid, {
+            ...dadosIniciais,
+            ultimaAtualizacaoLocal: Date.now(),
+          });
+          leituraConcluidaComSucesso = true;
+        }
+      } catch {
+        // Se a leitura falhar, mantemos o estado atual e evitamos sobrescrever o Firestore com zeros.
+      } finally {
+        podeSalvarRef.current = leituraConcluidaComSucesso;
+        setCarregandoDados(false);
+      }
     });
 
-    return () => {
-      unsubscribeBudget?.();
-      unsubscribeLists?.();
-      unsubscribeAuth();
-    };
+    return unsubscribe;
   }, []);
 
-  const salvarOrcamento = async (valor: number) => {
+  useEffect(() => {
     const uid = usuarioAtualRef.current;
-    setOrcamentoTotal(valor);
 
-    if (!uid) {
+    if (!uid || !podeSalvarRef.current || carregandoDados) {
       return;
     }
 
-    await setDoc(
-      budgetDocRef(uid),
-      {
-        orcamentoTotal: valor,
-        atualizadoEm: serverTimestamp(),
-      },
-      { merge: true }
-    );
-  };
+    const salvar = async () => {
+      await salvarDadosUsuario(uid, montarDadosParaSalvar());
+    };
 
-  const criarListaSeNecessario = async () => {
-    const uid = usuarioAtualRef.current;
+    salvar();
+  }, [
+    carregandoDados,
+    montarDadosParaSalvar,
+    salvarDadosUsuario,
+  ]);
 
-    if (!uid) {
-      throw new Error("Usuario nao autenticado.");
-    }
+  const opcoesCategoria = useMemo(
+    () => [...categoriasPadrao, ...categoriasPersonalizadas],
+    [categoriasPersonalizadas]
+  );
 
-    if (listaAtivaRef.current) {
-      return listaAtivaRef.current.id;
-    }
+  const categorias = useMemo(
+    () => opcoesCategoria.map((categoria) => categoria.nome),
+    [opcoesCategoria]
+  );
 
-    const agora = new Date().toISOString();
-    const documento = await addDoc(shoppingListsRef(uid), {
-      nome: `Compra ${new Date().toLocaleDateString("pt-BR")}`,
-      data: agora,
-      status: "on_market",
-      produtos: [],
-      categorias: [],
-      valores: { total: 0, quantidadeProdutos: 0 },
-      totais: { totalFinal: 0, porCategoria: {} },
-      notaFiscalImage: null,
-      criadaEm: serverTimestamp(),
-      atualizadaEm: serverTimestamp(),
-    });
+  const itensHistoricosDoCiclo = useMemo(
+    () => historicoCompras.flatMap((compra) => compra.items),
+    [historicoCompras]
+  );
 
-    return documento.id;
-  };
-
-  const atualizarProdutosListaAtiva = async (produtos: ProdutoCompra[], listaIdOverride?: string) => {
-    const uid = usuarioAtualRef.current;
-    const listaId = listaIdOverride ?? listaAtivaRef.current?.id;
-
-    if (!uid || !listaId) {
-      return;
-    }
-
-    const totais = calcularTotais(produtos);
-    await updateDoc(doc(db, "users", uid, "shoppingLists", listaId), {
-      produtos,
-      categorias: totais.categorias,
-      valores: totais.valores,
-      totais: totais.totais,
-      atualizadaEm: serverTimestamp(),
-    });
-  };
+  const itensDoCiclo = useMemo(
+    () => [...itensHistoricosDoCiclo, ...items],
+    [itensHistoricosDoCiclo, items]
+  );
 
   const valorGasto = useMemo(
-    () => listasFinalizadas.reduce((total, lista) => total + lista.totais.totalFinal, 0),
-    [listasFinalizadas]
+    () => itensDoCiclo.reduce((total, item) => total + calcularValorItem(item), 0),
+    [itensDoCiclo]
   );
+
   const orcamentoRestante = orcamentoTotal - valorGasto;
 
-  const gastosPorCategoria = useMemo(() => {
-    const agrupado = listasFinalizadas.reduce<Record<Categoria, { valor: number; quantidade: number }>>(
-      (acc, lista) => {
-        lista.produtos
-          .filter((produto) => produto.status === "concluido")
-          .forEach((produto) => {
-            acc[produto.categoria] = acc[produto.categoria] ?? { valor: 0, quantidade: 0 };
-            acc[produto.categoria].valor += produto.subtotal ?? 0;
-            acc[produto.categoria].quantidade += produto.quantidade;
-          });
-        return acc;
-      },
-      {} as Record<Categoria, { valor: number; quantidade: number }>
-    );
-
-    return categorias
-      .map((categoria) => {
-        const item = agrupado[categoria] ?? { valor: 0, quantidade: 0 };
-        return {
-          nome: categoria,
-          valor: item.valor,
-          percentual: valorGasto === 0 ? 0 : (item.valor / valorGasto) * 100,
-          cor: corCategoria[categoria],
-          quantidadeItens: item.quantidade,
-        };
-      })
-      .filter((categoria) => categoria.valor > 0)
-      .sort((a, b) => b.valor - a.valor);
-  }, [listasFinalizadas, valorGasto]);
+  const gastosPorCategoria = useMemo(
+    () => criarResumoCategorias(itensDoCiclo, categoriasPersonalizadas),
+    [categoriasPersonalizadas, itensDoCiclo]
+  );
 
   const value = useMemo<BudgetContextValue>(
     () => ({
       categorias,
-      items: listaAtiva?.produtos ?? [],
-      listaAtiva,
-      listasFinalizadas,
+      opcoesCategoria,
+      items,
+      onMarketItems,
+      historicoCompras,
+      cicloAno,
       orcamentoTotal,
       valorGasto,
       orcamentoRestante,
       gastosPorCategoria,
       carregandoDados,
+      forcarSalvarDados,
       definirOrcamentoTotal: (valor) => {
-        void salvarOrcamento(valor);
+        orcamentoTotalRef.current = valor;
+        setOrcamentoTotal(valor);
+        salvarEstadoAtualComOverrides({ orcamentoTotal: valor }).catch(() => undefined);
       },
-      adicionarItem: async (item) => {
-        const listaId = await criarListaSeNecessario();
-        const listaAtual = listaAtivaRef.current;
-        const produtosAtuais = listaAtual?.id === listaId ? listaAtual.produtos : [];
-        const produtoNovo = normalizarProduto({
-          ...item,
-          id: Date.now(),
-          cor: corCategoria[item.categoria],
-          status: "pendente",
-        });
+      adicionarCategoriaPersonalizada: (nome, cor) => {
+        const nomeNormalizado = normalizarNomeCategoria(nome);
 
-        await atualizarProdutosListaAtiva([...produtosAtuais, produtoNovo], listaId);
-      },
-      deletarItem: async (id) => {
-        await atualizarProdutosListaAtiva((listaAtivaRef.current?.produtos ?? []).filter((item) => item.id !== id));
-      },
-      incrementarQuantidade: async (id) => {
-        await atualizarProdutosListaAtiva(
-          (listaAtivaRef.current?.produtos ?? []).map((item) =>
-            item.id === id && item.status === "pendente"
-              ? { ...item, quantidade: item.quantidade + 1 }
-              : item
-          )
-        );
-      },
-      decrementarQuantidade: async (id) => {
-        await atualizarProdutosListaAtiva(
-          (listaAtivaRef.current?.produtos ?? []).map((item) =>
-            item.id === id && item.status === "pendente"
-              ? { ...item, quantidade: Math.max(1, item.quantidade - 1) }
-              : item
-          )
-        );
-      },
-      definirQuantidade: async (id, quantidade) => {
-        await atualizarProdutosListaAtiva(
-          (listaAtivaRef.current?.produtos ?? []).map((item) =>
-            item.id === id && item.status === "pendente"
-              ? { ...item, quantidade: Math.max(1, quantidade) }
-              : item
-          )
-        );
-      },
-      concluirProduto: async (id, valorUnitario) => {
-        await atualizarProdutosListaAtiva(
-          (listaAtivaRef.current?.produtos ?? []).map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  status: "concluido",
-                  valorUnitario,
-                  subtotal: valorUnitario * item.quantidade,
-                  compradoEm: new Date().toISOString(),
-                }
-              : item
-          )
-        );
-      },
-      reabrirProduto: async (id) => {
-        await atualizarProdutosListaAtiva(
-          (listaAtivaRef.current?.produtos ?? []).map((item) => {
-            if (item.id !== id) {
-              return item;
-            }
+        if (!nomeNormalizado) {
+          return { sucesso: false, erro: "nome-vazio" };
+        }
 
-            const { valorUnitario, subtotal, compradoEm, ...produtoPendente } = item;
-            void valorUnitario;
-            void subtotal;
-            void compradoEm;
-
-            return {
-              ...produtoPendente,
-              status: "pendente",
-            };
-          })
+        const categoriaExistente = [...categoriasPadrao, ...categoriasPersonalizadas].find(
+          (categoria) => categoria.nome.toLowerCase() === nomeNormalizado.toLowerCase()
         );
-      },
-      finalizarLista: async (nome) => {
-        const uid = usuarioAtualRef.current;
-        const lista = listaAtivaRef.current;
 
-        if (!uid || !lista) {
+        if (categoriaExistente) {
+          return { sucesso: false, erro: "categoria-existente" };
+        }
+
+        const proximasCategorias = [
+          ...categoriasPersonalizadasRef.current,
+          { nome: nomeNormalizado, cor, personalizada: true },
+        ];
+
+        categoriasPersonalizadasRef.current = proximasCategorias;
+        setCategoriasPersonalizadas(proximasCategorias);
+        salvarEstadoAtualComOverrides({
+          categoriasPersonalizadas: proximasCategorias,
+        }).catch(() => undefined);
+
+        return { sucesso: true, categoria: nomeNormalizado };
+      },
+      removerCategoriaPersonalizada: (nome) => {
+        const nomeNormalizado = normalizarNomeCategoria(nome);
+        const categoriaExiste = categoriasPersonalizadas.some(
+          (categoria) => categoria.nome === nomeNormalizado
+        );
+
+        if (!categoriaExiste) {
+          return { sucesso: false, erro: "categoria-nao-encontrada" };
+        }
+
+        const proximasCategorias = categoriasPersonalizadasRef.current.filter(
+          (categoria) => categoria.nome !== nomeNormalizado
+        );
+
+        categoriasPersonalizadasRef.current = proximasCategorias;
+        setCategoriasPersonalizadas(proximasCategorias);
+        salvarEstadoAtualComOverrides({
+          categoriasPersonalizadas: proximasCategorias,
+        }).catch(() => undefined);
+
+        return { sucesso: true };
+      },
+      adicionarItem: (item) => {
+        const novoItem = normalizarItem(
+          {
+            ...item,
+            id: Date.now(),
+            cor: getCorCategoria(item.categoria, categoriasPersonalizadasRef.current),
+          },
+          categoriasPersonalizadasRef.current
+        );
+        const proximosItems = [...itemsRef.current, novoItem];
+
+        itemsRef.current = proximosItems;
+        setItems(proximosItems);
+        salvarEstadoAtualComOverrides({ items: proximosItems }).catch(() => undefined);
+      },
+      adicionarOnMarketItem: (item) => {
+        const novoItem = normalizarOnMarketItem(
+          {
+            ...item,
+            id: Date.now(),
+            cor: getCorCategoria(item.categoria, categoriasPersonalizadasRef.current),
+          },
+          categoriasPersonalizadasRef.current
+        );
+        const proximosItens = [...onMarketItemsRef.current, novoItem];
+
+        onMarketItemsRef.current = proximosItens;
+        setOnMarketItems(proximosItens);
+        salvarEstadoAtualComOverrides({
+          onMarketItems: proximosItens,
+        }).catch(() => undefined);
+      },
+      concluirOnMarketItem: (id, valorUnitario) => {
+        if (valorUnitario <= 0) {
           return;
         }
 
-        const totais = calcularTotais(lista.produtos);
-        await updateDoc(doc(db, "users", uid, "shoppingLists", lista.id), {
-          nome: nome?.trim() || lista.nome,
-          status: "finalizada",
-          notaFiscalImage: null,
-          notaFiscalStatus: "para_atualizacoes_futuras",
-          categorias: totais.categorias,
-          valores: totais.valores,
-          totais: totais.totais,
-          finalizadaEm: serverTimestamp(),
-          atualizadaEm: serverTimestamp(),
+        const itemConcluido = onMarketItemsRef.current.find((item) => item.id === id);
+
+        if (!itemConcluido) {
+          return;
+        }
+
+        const proximosOnMarketItems = onMarketItemsRef.current.filter((item) => item.id !== id);
+        const proximosItems = [
+          ...itemsRef.current,
+          normalizarItem(
+            {
+              ...itemConcluido,
+              valorUnitario,
+            },
+            categoriasPersonalizadasRef.current
+          ),
+        ];
+
+        onMarketItemsRef.current = proximosOnMarketItems;
+        itemsRef.current = proximosItems;
+        setOnMarketItems(proximosOnMarketItems);
+        setItems(proximosItems);
+        salvarEstadoAtualComOverrides({
+          items: proximosItems,
+          onMarketItems: proximosOnMarketItems,
+        }).catch(() => undefined);
+      },
+      finalizarCompra: async ({ nome, data, fotoNotaUri, completedBy }) => {
+        if (!nome.trim()) {
+          return { sucesso: false, erro: "nome-vazio" };
+        }
+
+        if (!data.trim()) {
+          return { sucesso: false, erro: "data-vazia" };
+        }
+
+        if (items.length === 0) {
+          return { sucesso: false, erro: "sem-itens" };
+        }
+
+        const completedByNormalizado =
+          typeof completedBy === "string" ? completedBy.trim() : "";
+
+        if (completedBy !== undefined && completedBy !== null && !completedByNormalizado) {
+          return { sucesso: false, erro: "comprador-vazio" };
+        }
+
+        const totalGasto = items.reduce((total, item) => total + calcularValorItem(item), 0);
+        const diaDoMes = Number(data.split("-")[2] ?? "1");
+        const gastoPorCategoria = criarResumoCategorias(items, categoriasPersonalizadas);
+        const agora = new Date();
+
+        const compra: CompraHistorico = {
+          id: Date.now(),
+          nome: nome.trim(),
+          data,
+          fotoNotaUri: fotoNotaUri ?? null,
+          completedBy: completedByNormalizado || null,
+          completedAt: agora,
+          createdAt: agora,
+          items,
+          totalGasto,
+          mediaDiaria: diaDoMes > 0 ? totalGasto / diaDoMes : totalGasto,
+          categoriasAtivas: gastoPorCategoria.length,
+          gastoPorCategoria,
+        };
+
+        const historicoAtualizado = [compra, ...historicoCompras];
+
+        historicoComprasRef.current = historicoAtualizado;
+        itemsRef.current = [];
+        setHistoricoCompras(historicoAtualizado);
+        setItems([]);
+        await salvarDadosUsuario(usuarioAtualRef.current ?? "", {
+          orcamentoTotal,
+          items: [],
+          onMarketItems,
+          historicoCompras: historicoAtualizado,
+          categoriasPersonalizadas,
+          cicloAno,
+          ultimaAtualizacaoLocal: Date.now(),
         });
+
+        return { sucesso: true };
+      },
+      iniciarNovoCiclo: (ano) => {
+        setCicloAno(normalizarCicloAno());
+        setHistoricoCompras([]);
+        setItems([]);
+        setOnMarketItems([]);
+      },
+      buscarCompraPorId: (id) => historicoCompras.find((compra) => compra.id === id),
+      deletarItem: (id) => {
+        const proximosItems = itemsRef.current.filter((item) => item.id !== id);
+        itemsRef.current = proximosItems;
+        setItems(proximosItems);
+        salvarEstadoAtualComOverrides({ items: proximosItems }).catch(() => undefined);
+      },
+      incrementarQuantidade: (id) => {
+        const proximosItems = itemsRef.current.map((item) =>
+          item.id === id ? { ...item, quantidade: item.quantidade + 1 } : item
+        );
+        itemsRef.current = proximosItems;
+        setItems(proximosItems);
+        salvarEstadoAtualComOverrides({ items: proximosItems }).catch(() => undefined);
+      },
+      decrementarQuantidade: (id) => {
+        const proximosItems = itemsRef.current.map((item) => {
+          if (item.id !== id) {
+            return item;
+          }
+
+          return {
+            ...item,
+            quantidade: Math.max(0, item.quantidade - 1),
+          };
+        });
+        itemsRef.current = proximosItems;
+        setItems(proximosItems);
+        salvarEstadoAtualComOverrides({ items: proximosItems }).catch(() => undefined);
       },
       listarItensPorCategoria: (categoria) =>
-        listasFinalizadas.flatMap((lista) =>
-          lista.produtos.filter((item) => item.categoria === categoria && item.status === "concluido")
-        ),
+        items.filter((item) => item.categoria === categoria && item.quantidade > 0),
       totalCategoria: (categoria) =>
-        listasFinalizadas.reduce(
-          (total, lista) =>
-            total +
-            lista.produtos
-              .filter((item) => item.categoria === categoria && item.status === "concluido")
-              .reduce((subtotal, item) => subtotal + (item.subtotal ?? 0), 0),
-          0
-        ),
+        items
+          .filter((item) => item.categoria === categoria)
+          .reduce((total, item) => total + calcularValorItem(item), 0),
     }),
     [
       carregandoDados,
+      categorias,
+      categoriasPersonalizadas,
+      cicloAno,
+      forcarSalvarDados,
       gastosPorCategoria,
-      listaAtiva,
-      listasFinalizadas,
+      historicoCompras,
+      items,
+      onMarketItems,
+      opcoesCategoria,
       orcamentoRestante,
       orcamentoTotal,
+      salvarEstadoAtualComOverrides,
       valorGasto,
     ]
   );

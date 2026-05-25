@@ -3,7 +3,6 @@ import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
   Alert,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,97 +11,64 @@ import {
   View,
 } from "react-native";
 
-import { BackButton } from "@/components/back-button";
-import { IconSymbol } from "@/components/ui/icon-symbol";
-import { ProdutoCompra, useBudget } from "@/context/budget-context";
+import { OnMarketItem, useBudget } from "@/context/budget-context";
 
-const formatarMoeda = (valor: number) =>
-  valor.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
+const FILTROS_CATEGORIA = [
+  "Todas",
+  "Limpeza",
+  "Mercado",
+  "Hortifruti",
+  "Higiene",
+  "Padaria",
+  "Outros",
+] as const;
+
+const formatarQuantidade = (quantidade: number) =>
+  `${quantidade} ${quantidade === 1 ? "unidade" : "unidades"}`;
 
 export default function OnMarketScreen() {
   const router = useRouter();
-  const {
-    categorias,
-    carregandoDados,
-    listaAtiva,
-    incrementarQuantidade,
-    decrementarQuantidade,
-    definirQuantidade,
-    concluirProduto,
-    reabrirProduto,
-    finalizarLista,
-  } = useBudget();
-  const [produtoSelecionado, setProdutoSelecionado] = useState<ProdutoCompra | null>(null);
-  const [valorUnitario, setValorUnitario] = useState("");
-  const [modalNotaAberta, setModalNotaAberta] = useState(false);
-  const [nomeCompra, setNomeCompra] = useState("");
-  const [finalizando, setFinalizando] = useState(false);
+  const { carregandoDados, onMarketItems, concluirOnMarketItem } = useBudget();
+  const [categoriaAtiva, setCategoriaAtiva] =
+    useState<(typeof FILTROS_CATEGORIA)[number]>("Todas");
+  const [itemAbertoId, setItemAbertoId] = useState<number | null>(null);
+  const [valoresUnitarios, setValoresUnitarios] = useState<Record<number, string>>({});
 
-  const produtosAgrupados = useMemo(() => {
-    const produtos = listaAtiva?.produtos ?? [];
-
-    return categorias
-      .map((categoria) => {
-        const itens = produtos
-          .filter((produto) => produto.categoria === categoria)
-          .sort((a, b) => Number(a.status === "concluido") - Number(b.status === "concluido"));
-
-        return { categoria, itens };
-      })
-      .filter((grupo) => grupo.itens.length > 0);
-  }, [categorias, listaAtiva]);
-
-  const totalParcial =
-    listaAtiva?.produtos.reduce((total, produto) => total + (produto.subtotal ?? 0), 0) ?? 0;
-
-  const abrirModalValor = (produto: ProdutoCompra) => {
-    setProdutoSelecionado(produto);
-    setValorUnitario(produto.valorUnitario ? String(produto.valorUnitario) : "");
-  };
-
-  const confirmarProduto = async () => {
-    if (!produtoSelecionado) {
-      return;
+  const itensFiltrados = useMemo(() => {
+    if (categoriaAtiva === "Todas") {
+      return onMarketItems;
     }
 
-    const valor = Number(valorUnitario.replace(",", "."));
+    return onMarketItems.filter((item) => item.categoria === categoriaAtiva);
+  }, [categoriaAtiva, onMarketItems]);
+
+  const toggleItem = (item: OnMarketItem) => {
+    setItemAbertoId((estadoAtual) => (estadoAtual === item.id ? null : item.id));
+  };
+
+  const confirmarValor = (item: OnMarketItem) => {
+    const valorDigitado = valoresUnitarios[item.id] ?? "";
+    const valor = Number(valorDigitado.replace(",", "."));
 
     if (Number.isNaN(valor) || valor <= 0) {
-      Alert.alert("Valor invalido", "Informe o valor unitario do produto.");
+      Alert.alert("Valor invalido", "Informe um valor unitario maior que zero.");
       return;
     }
 
-    await concluirProduto(produtoSelecionado.id, valor);
-    setProdutoSelecionado(null);
-    setValorUnitario("");
-  };
-
-  const abrirFinalizacao = () => {
-    setNomeCompra(listaAtiva?.nome ?? "");
-    setModalNotaAberta(true);
-  };
-
-  const finalizar = async () => {
-    try {
-      setFinalizando(true);
-      await finalizarLista(nomeCompra);
-      setModalNotaAberta(false);
-      router.replace("/(tabs)");
-    } catch {
-      Alert.alert("Falha ao finalizar", "Nao foi possivel finalizar a lista agora.");
-    } finally {
-      setFinalizando(false);
-    }
+    concluirOnMarketItem(item.id, valor);
+    setValoresUnitarios((estadoAtual) => {
+      const proximoEstado = { ...estadoAtual };
+      delete proximoEstado[item.id];
+      return proximoEstado;
+    });
+    setItemAbertoId(null);
   };
 
   if (carregandoDados) {
     return (
       <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
         <View style={styles.loadingCard}>
-          <Text style={styles.loadingText}>Preparando On Market...</Text>
+          <Text style={styles.loadingText}>Carregando lista ativa...</Text>
         </View>
       </LinearGradient>
     );
@@ -111,161 +77,100 @@ export default function OnMarketScreen() {
   return (
     <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.topBar}>
-          <BackButton fallback="/(tabs)" light />
-        </View>
-        <View style={styles.header}>
-          <Text style={styles.title}>On Market</Text>
-          <Text style={styles.subtitle}>Lista ativa para usar durante a compra</Text>
-          <Text style={styles.totalParcial}>{formatarMoeda(totalParcial)}</Text>
-        </View>
+        <View style={styles.card}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Text style={styles.backButtonText}>Voltar</Text>
+          </TouchableOpacity>
 
-        {!listaAtiva || listaAtiva.produtos.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Nenhum produto pendente</Text>
-            <Text style={styles.emptyText}>Adicione produtos para montar sua lista de mercado.</Text>
-            <TouchableOpacity style={styles.primaryButton} onPress={() => router.push("/(tabs)/add")}>
-              <Text style={styles.primaryButtonText}>Adicionar Produtos</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <>
-            {produtosAgrupados.map((grupo) => (
-              <View key={grupo.categoria} style={styles.section}>
-                <Text style={styles.sectionTitle}>{grupo.categoria}</Text>
-                {grupo.itens.map((produto) => (
-                  <View
-                    key={produto.id}
-                    style={[
-                      styles.productCard,
-                      produto.status === "concluido" && styles.productCardDone,
-                    ]}>
-                    <View style={styles.productHeader}>
-                      <View style={[styles.categoryDot, { backgroundColor: produto.cor }]} />
-                      <View style={styles.productTextWrap}>
-                        <Text
-                          style={[
-                            styles.productName,
-                            produto.status === "concluido" && styles.productNameDone,
-                          ]}>
-                          {produto.nome}
-                        </Text>
-                        <Text style={styles.productMeta}>
-                          {produto.status === "concluido"
-                            ? `${formatarMoeda(produto.valorUnitario ?? 0)} un. - ${formatarMoeda(
-                                produto.subtotal ?? 0
-                              )}`
-                            : "Pendente"}
-                        </Text>
-                      </View>
-                      <View style={styles.quantityRow}>
-                        <TouchableOpacity
-                          style={styles.qtyButton}
-                          disabled={produto.status === "concluido"}
-                          onPress={() => decrementarQuantidade(produto.id)}>
-                          <Text style={styles.qtyButtonText}>-</Text>
-                        </TouchableOpacity>
-                        <TextInput
-                          editable={produto.status === "pendente"}
-                          keyboardType="number-pad"
-                          value={String(produto.quantidade)}
-                          onChangeText={(texto) => {
-                            const quantidade = Number(texto);
-                            if (Number.isInteger(quantidade) && quantidade > 0) {
-                              void definirQuantidade(produto.id, quantidade);
-                            }
-                          }}
-                          style={styles.qtyInput}
-                        />
-                        <TouchableOpacity
-                          style={styles.qtyButton}
-                          disabled={produto.status === "concluido"}
-                          onPress={() => incrementarQuantidade(produto.id)}>
-                          <Text style={styles.qtyButtonText}>+</Text>
-                        </TouchableOpacity>
-                      </View>
-                      <TouchableOpacity
-                        style={[
-                          styles.checkbox,
-                          produto.status === "concluido" && styles.checkboxDone,
-                        ]}
-                        onPress={() =>
-                          produto.status === "concluido"
-                            ? reabrirProduto(produto.id)
-                            : abrirModalValor(produto)
-                        }>
-                        {produto.status === "concluido" ? (
-                          <IconSymbol name="checkmark" size={18} color="#fff" />
-                        ) : null}
-                      </TouchableOpacity>
+          <Text style={styles.title}>On Market</Text>
+          <Text style={styles.subtitle}>Lista de compras ativa</Text>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filtersRow}>
+            {FILTROS_CATEGORIA.map((categoria) => (
+              <TouchableOpacity
+                key={categoria}
+                style={[
+                  styles.filterChip,
+                  categoriaAtiva === categoria && styles.filterChipActive,
+                ]}
+                onPress={() => setCategoriaAtiva(categoria)}>
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    categoriaAtiva === categoria && styles.filterChipTextActive,
+                  ]}>
+                  {categoria}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {itensFiltrados.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>Nenhum item nessa selecao</Text>
+              <Text style={styles.emptyText}>
+                Adicione itens na Home e finalize aqui quando estiver no mercado.
+              </Text>
+            </View>
+          ) : (
+            itensFiltrados.map((item) => {
+              const aberto = itemAbertoId === item.id;
+
+              return (
+                <View key={item.id} style={styles.itemCard}>
+                  <View style={styles.itemHeader}>
+                    <TouchableOpacity
+                      style={[styles.checkbox, aberto && styles.checkboxActive]}
+                      onPress={() => toggleItem(item)}>
+                      {aberto ? <Text style={styles.checkboxIcon}>✓</Text> : null}
+                    </TouchableOpacity>
+
+                    <View style={styles.itemMain}>
+                      <Text style={styles.itemName}>{item.nome}</Text>
+                      <Text style={styles.itemMeta}>
+                        {formatarQuantidade(item.quantidade)} • {item.categoria}
+                      </Text>
+                    </View>
+
+                    <View style={[styles.categoryBadge, { backgroundColor: item.cor }]}>
+                      <Text style={styles.categoryBadgeText}>{item.categoria}</Text>
                     </View>
                   </View>
-                ))}
-              </View>
-            ))}
 
-            <TouchableOpacity
-              style={styles.finishButton}
-              onPress={abrirFinalizacao}
-              disabled={finalizando}>
-              <Text style={styles.finishButtonText}>
-                {finalizando ? "Finalizando..." : "Finalizar Lista"}
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
+                  {aberto ? (
+                    <View style={styles.priceBox}>
+                      <Text style={styles.priceLabel}>Valor unitario</Text>
+                      <View style={styles.priceRow}>
+                        <TextInput
+                          value={valoresUnitarios[item.id] ?? ""}
+                          onChangeText={(texto) =>
+                            setValoresUnitarios((estadoAtual) => ({
+                              ...estadoAtual,
+                              [item.id]: texto,
+                            }))
+                          }
+                          style={styles.priceInput}
+                          keyboardType="decimal-pad"
+                          placeholder="Ex.: 12,50"
+                          placeholderTextColor="#90a096"
+                        />
+                        <TouchableOpacity
+                          style={styles.confirmButton}
+                          onPress={() => confirmarValor(item)}>
+                          <Text style={styles.confirmButtonText}>Confirmar</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })
+          )}
+        </View>
       </ScrollView>
-
-      <Modal transparent visible={!!produtoSelecionado} animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Qual o valor unitario do produto?</Text>
-            <Text style={styles.modalSubtitle}>{produtoSelecionado?.nome}</Text>
-            <TextInput
-              value={valorUnitario}
-              onChangeText={setValorUnitario}
-              keyboardType="decimal-pad"
-              placeholder="Ex.: 8,90"
-              placeholderTextColor="#8b9890"
-              style={styles.modalInput}
-            />
-            <TouchableOpacity style={styles.primaryButton} onPress={confirmarProduto}>
-              <Text style={styles.primaryButtonText}>Salvar valor</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryButton} onPress={() => setProdutoSelecionado(null)}>
-              <Text style={styles.secondaryButtonText}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal transparent visible={modalNotaAberta} animationType="slide">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Finalizar compra</Text>
-            <Text style={styles.modalSubtitle}>Nome da compra</Text>
-            <TextInput
-              value={nomeCompra}
-              onChangeText={setNomeCompra}
-              placeholder="Ex.: Compra da semana"
-              placeholderTextColor="#8b9890"
-              style={styles.modalInput}
-            />
-            <Text style={styles.modalSubtitle}>Foto da nota fiscal</Text>
-            <Text style={styles.futureText}>
-              Recurso para atualizacoes futuras. A lista sera finalizada normalmente sem foto.
-            </Text>
-            <TouchableOpacity style={styles.primaryButton} onPress={finalizar} disabled={finalizando}>
-              <Text style={styles.primaryButtonText}>
-                {finalizando ? "Finalizando..." : "Finalizar sem foto"}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryButton} onPress={() => setModalNotaAberta(false)}>
-              <Text style={styles.secondaryButtonText}>Voltar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </LinearGradient>
   );
 }
@@ -275,203 +180,178 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
+    flexGrow: 1,
     padding: 20,
-    paddingBottom: 110,
-    gap: 16,
+    justifyContent: "center",
   },
-  topBar: {
-    minHeight: 32,
-    alignItems: "flex-start",
-  },
-  header: {
+  card: {
     backgroundColor: "#e9eceb",
-    borderRadius: 26,
+    borderRadius: 30,
     padding: 22,
-    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "#d7dfda",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 18,
+  },
+  backButtonText: {
+    color: "#3f5d4d",
+    fontWeight: "700",
   },
   title: {
     fontSize: 28,
+    fontWeight: "bold",
+    textAlign: "center",
     color: "#2f5d45",
-    fontWeight: "800",
   },
   subtitle: {
-    color: "#61736a",
-    marginTop: 5,
     textAlign: "center",
+    color: "#66766d",
+    marginTop: 6,
+    marginBottom: 20,
   },
-  totalParcial: {
-    color: "#2f5d45",
-    fontSize: 28,
-    fontWeight: "800",
-    marginTop: 12,
-    fontVariant: ["tabular-nums"],
-  },
-  section: {
+  filtersRow: {
+    flexDirection: "row",
     gap: 10,
+    paddingRight: 10,
+    marginBottom: 18,
   },
-  sectionTitle: {
+  filterChip: {
+    backgroundColor: "#d3dcd7",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  filterChipActive: {
+    backgroundColor: "#2f5d45",
+  },
+  filterChipText: {
+    color: "#42524a",
+    fontWeight: "600",
+  },
+  filterChipTextActive: {
     color: "#fff",
-    fontSize: 18,
-    fontWeight: "800",
   },
-  productCard: {
+  itemCard: {
     backgroundColor: "#fff",
     borderRadius: 18,
     padding: 14,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  productCardDone: {
-    backgroundColor: "#d8ddda",
-  },
-  productHeader: {
+  itemHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-  },
-  categoryDot: {
-    width: 12,
-    height: 42,
-    borderRadius: 8,
-  },
-  productTextWrap: {
-    flex: 1,
-  },
-  productName: {
-    color: "#2c3e34",
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  productNameDone: {
-    color: "#78837d",
-  },
-  productMeta: {
-    color: "#6f7d75",
-    marginTop: 3,
-    fontSize: 12,
+    gap: 12,
   },
   checkbox: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 7,
     borderWidth: 2,
+    borderColor: "#9aaca1",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
+  checkboxActive: {
+    backgroundColor: "#2f5d45",
     borderColor: "#2f5d45",
-    alignItems: "center",
-    justifyContent: "center",
   },
-  checkboxDone: {
-    backgroundColor: "#2f5d45",
-  },
-  quantityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  qtyButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
-    backgroundColor: "#d8eadf",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  qtyButtonText: {
-    color: "#2f5d45",
-    fontSize: 17,
-    fontWeight: "900",
-  },
-  qtyInput: {
-    width: 38,
-    height: 30,
-    borderRadius: 9,
-    backgroundColor: "#eef5f1",
-    textAlign: "center",
-    color: "#2f5d45",
-    fontWeight: "800",
-  },
-  finishButton: {
-    backgroundColor: "#f2c94c",
-    borderRadius: 18,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  finishButtonText: {
-    color: "#294536",
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  emptyCard: {
-    backgroundColor: "#e9eceb",
-    borderRadius: 24,
-    padding: 24,
-    alignItems: "center",
-    gap: 12,
-  },
-  emptyTitle: {
-    color: "#2f5d45",
-    fontSize: 20,
-    fontWeight: "800",
-  },
-  emptyText: {
-    color: "#61736a",
-    textAlign: "center",
-  },
-  primaryButton: {
-    backgroundColor: "#2f5d45",
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    alignItems: "center",
-    width: "100%",
-  },
-  primaryButtonText: {
+  checkboxIcon: {
     color: "#fff",
     fontWeight: "800",
+    fontSize: 13,
   },
-  secondaryButton: {
-    backgroundColor: "#dce7e0",
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    alignItems: "center",
-    width: "100%",
-  },
-  secondaryButtonText: {
-    color: "#2f5d45",
-    fontWeight: "800",
-  },
-  modalBackdrop: {
+  itemMain: {
     flex: 1,
-    backgroundColor: "rgba(13, 36, 25, 0.55)",
+  },
+  itemName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#34443c",
+  },
+  itemMeta: {
+    color: "#6c7a73",
+    marginTop: 4,
+    fontSize: 12,
+  },
+  categoryBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    maxWidth: 110,
+  },
+  categoryBadgeText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 11,
+  },
+  priceBox: {
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#e1e8e3",
+  },
+  priceLabel: {
+    color: "#486756",
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  priceRow: {
+    flexDirection: "row",
+    gap: 10,
     alignItems: "center",
-    justifyContent: "center",
-    padding: 22,
   },
-  modalCard: {
-    width: "100%",
-    backgroundColor: "#f4f7f5",
-    borderRadius: 24,
-    padding: 20,
-    gap: 12,
-  },
-  modalTitle: {
-    color: "#2f5d45",
-    fontSize: 20,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  modalSubtitle: {
-    color: "#61736a",
-    textAlign: "center",
-  },
-  modalInput: {
-    backgroundColor: "#fff",
+  priceInput: {
+    flex: 1,
+    backgroundColor: "#f7faf8",
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 13,
+    fontSize: 16,
+    color: "#2f5d45",
+  },
+  confirmButton: {
+    backgroundColor: "#2f5d45",
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  confirmButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  emptyState: {
+    paddingVertical: 40,
+    alignItems: "center",
+  },
+  emptyTitle: {
     color: "#2f5d45",
     fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 8,
   },
-  futureText: {
-    color: "#61736a",
+  emptyText: {
+    color: "#718078",
     textAlign: "center",
     lineHeight: 20,
   },

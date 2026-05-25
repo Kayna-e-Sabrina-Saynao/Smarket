@@ -15,14 +15,19 @@ type IconSymbolName = keyof typeof MAPPING;
  */
 const MAPPING = {
   'house.fill': 'home',
-  'cart.fill': 'shopping-cart',
   'chart.bar.fill': 'bar-chart',
-  'checkmark': 'check',
+  'square.grid.2x2.fill': 'dashboard',
   'rectangle.portrait.and.arrow.right': 'logout',
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.left': 'chevron-left',
   'chevron.right': 'chevron-right',
+  'questionmark.circle.fill': 'help',
+  'gearshape.fill': 'settings',
+  'person.2.fill': 'groups',
+  'qrcode': 'qr-code',
+  'shield.lefthalf.filled': 'verified-user',
+  'doc.text.fill': 'description',
 } as IconMapping;
 
 /**

@@ -1,7 +1,7 @@
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import { signOut } from "firebase/auth";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -9,10 +9,17 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
 
 import { useBudget } from "@/context/budget-context";
-import { BackButton } from "@/components/back-button";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { AppEmptyState } from "@/src/components/AppEmptyState";
 import { auth } from "../../firebaseConfig";
 
 const formatarMoeda = (valor: number) =>
@@ -21,29 +28,96 @@ const formatarMoeda = (valor: number) =>
     currency: "BRL",
   });
 
+const MESES = [
+  "Janeiro",
+  "Fevereiro",
+  "Marco",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
+
+const HEADER_EXPANDED_HEIGHT = 252;
+const HEADER_COLLAPSED_HEIGHT = 124;
+const HEADER_SCROLL_DISTANCE = 160;
+
 export default function Home() {
   const router = useRouter();
   const {
+    categorias,
     carregandoDados,
-    listaAtiva,
+    forcarSalvarDados,
+    items,
     orcamentoTotal,
     valorGasto,
     orcamentoRestante,
     definirOrcamentoTotal,
+    deletarItem,
+    incrementarQuantidade,
+    decrementarQuantidade,
   } = useBudget();
+  const [categoriaAtiva, setCategoriaAtiva] = useState("Tudo");
   const [orcamentoInput, setOrcamentoInput] = useState(String(orcamentoTotal));
-  const saindoRef = useRef(false);
+  const [saindo, setSaindo] = useState(false);
+  const scrollY = useSharedValue(0);
 
   useEffect(() => {
     setOrcamentoInput(String(orcamentoTotal));
   }, [orcamentoTotal]);
 
+  const dataAtual = new Date();
+  const mesAtual = `${MESES[dataAtual.getMonth()]} ${dataAtual.getFullYear()}`;
+
   // O filtro permite visualizar todos os itens ou apenas uma categoria por vez.
   const percentualGasto = orcamentoTotal === 0 ? 0 : (valorGasto / orcamentoTotal) * 100;
 
-  const produtosAtivos = listaAtiva?.produtos ?? [];
-  const produtosPendentes = produtosAtivos.filter((item) => item.status === "pendente").length;
-  const produtosConcluidos = produtosAtivos.filter((item) => item.status === "concluido").length;
+  const itemsFiltrados =
+    categoriaAtiva === "Tudo"
+      ? items.filter((item) => item.quantidade > 0)
+      : items.filter((item) => item.categoria === categoriaAtiva && item.quantidade > 0);
+
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
+
+  const compactableHeaderStyle = useAnimatedStyle(() => ({
+    height: interpolate(
+      scrollY.value,
+      [0, HEADER_SCROLL_DISTANCE],
+      [HEADER_EXPANDED_HEIGHT, HEADER_COLLAPSED_HEIGHT],
+      Extrapolation.CLAMP
+    ),
+  }));
+
+  const compactDetailsStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [0, HEADER_SCROLL_DISTANCE * 0.7], [1, 0], Extrapolation.CLAMP),
+    transform: [
+      {
+        translateY: interpolate(
+          scrollY.value,
+          [0, HEADER_SCROLL_DISTANCE],
+          [0, -18],
+          Extrapolation.CLAMP
+        ),
+      },
+    ],
+  }));
+
+  const compactSummaryStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        scale: interpolate(scrollY.value, [0, HEADER_SCROLL_DISTANCE], [1, 0.88], Extrapolation.CLAMP),
+      },
+    ],
+  }));
 
   if (carregandoDados) {
     return (
@@ -67,16 +141,17 @@ export default function Home() {
   };
 
   const sairDaConta = async () => {
-    if (saindoRef.current) {
+    if (saindo) {
       return;
     }
 
-    saindoRef.current = true;
+    setSaindo(true);
     try {
+      await forcarSalvarDados();
       await signOut(auth);
       router.replace("/");
     } catch {
-      saindoRef.current = false;
+      setSaindo(false);
       alert("Nao foi possivel sair agora.");
     }
   };
@@ -85,103 +160,208 @@ export default function Home() {
     <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
       <View style={styles.card}>
         <View style={styles.headerRow}>
-          <BackButton fallback="/" />
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.helpIconButton}
+              onPress={() => router.push("/(tabs)/ajuda")}>
+              <View style={styles.helpIconInner}>
+                <Text style={styles.helpIconText}>?</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.settingsIconButton}
+              onPress={() => router.push("/(tabs)/configuracoes")}>
+              <IconSymbol name="gearshape.fill" size={24} color="#9ee0a2" />
+            </TouchableOpacity>
+          </View>
+
           <TouchableOpacity
             style={styles.logoutButton}
             onPress={sairDaConta}
-            disabled={false}>
+            disabled={saindo}>
             <IconSymbol
               name="rectangle.portrait.and.arrow.right"
               size={18}
               color="#fff"
             />
-            <Text style={styles.logoutText}>Sair</Text>
+            <Text style={styles.logoutText}>{saindo ? "Saindo..." : "Sair"}</Text>
           </TouchableOpacity>
         </View>
 
-          <Text style={styles.title}>Orcamento</Text>
-          <Text style={styles.month}>Janeiro 2026</Text>
+        <Animated.View style={[styles.compactableHeader, compactableHeaderStyle]}>
+          <Animated.View style={compactSummaryStyle}>
+            <Text style={styles.title}>Resumo Financeiro</Text>
+            <Text style={styles.month}>{mesAtual}</Text>
+          </Animated.View>
 
-        <View style={styles.orcamentoEditor}>
-          <Text style={styles.orcamentoLabel}>Orcamento total</Text>
-          <View style={styles.orcamentoRow}>
-            <TextInput
-              value={orcamentoInput}
-              onChangeText={setOrcamentoInput}
-              keyboardType="decimal-pad"
-              style={styles.orcamentoInput}
-              placeholder="Digite o valor"
-              placeholderTextColor="#88958d"
-            />
-            <TouchableOpacity style={styles.orcamentoButton} onPress={salvarOrcamento}>
-              <Text style={styles.orcamentoButtonText}>Salvar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <Text style={styles.value}>{formatarMoeda(orcamentoTotal)}</Text>
-
-        <View style={styles.progressContainer}>
-          <View
-            style={[
-              styles.progress,
-              {
-                width: `${Math.min(Math.max(percentualGasto, 0), 100)}%`,
-                backgroundColor: orcamentoRestante < 0 ? "#c0392b" : "#2f5d45",
-              },
-            ]}
-          />
-        </View>
-
-        <View style={styles.rowBetween}>
-          <Text style={styles.label}>Orcamento Restante</Text>
-          <Text style={styles.label}>Valor Gasto</Text>
-        </View>
-
-        <View style={styles.rowBetween}>
-          <Text
-            style={[
-              styles.labelValue,
-              orcamentoRestante < 0 && styles.labelValueNegative,
-            ]}>
-            {formatarMoeda(orcamentoRestante)}
-          </Text>
-          <Text style={styles.labelValue}>{formatarMoeda(valorGasto)}</Text>
-        </View>
-
-        <View style={styles.flowCard}>
-          <Text style={styles.flowTitle}>Fluxo de compras</Text>
-          <Text style={styles.flowText}>
-            Adicionar Produtos {">"} On Market {">"} Finalizacao {">"} Gastos
-          </Text>
-          <View style={styles.flowStats}>
-            <View style={styles.flowStat}>
-              <Text style={styles.flowStatValue}>{produtosPendentes}</Text>
-              <Text style={styles.flowStatLabel}>pendentes</Text>
+          <Animated.View style={compactDetailsStyle}>
+            <View style={styles.orcamentoEditor}>
+              <Text style={styles.orcamentoLabel}>Orcamento total</Text>
+              <View style={styles.orcamentoRow}>
+                <TextInput
+                  value={orcamentoInput}
+                  onChangeText={setOrcamentoInput}
+                  keyboardType="decimal-pad"
+                  style={styles.orcamentoInput}
+                  placeholder="Digite o valor"
+                  placeholderTextColor="#88958d"
+                />
+                <TouchableOpacity style={styles.orcamentoButton} onPress={salvarOrcamento}>
+                  <Text style={styles.orcamentoButtonText}>Salvar</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.flowStat}>
-              <Text style={styles.flowStatValue}>{produtosConcluidos}</Text>
-              <Text style={styles.flowStatLabel}>concluidos</Text>
+
+            <Text style={styles.value}>{formatarMoeda(orcamentoTotal)}</Text>
+
+            <View style={styles.progressContainer}>
+              <View
+                style={[
+                  styles.progress,
+                  {
+                    width: `${Math.min(Math.max(percentualGasto, 0), 100)}%`,
+                    backgroundColor: orcamentoRestante < 0 ? "#c0392b" : "#2f5d45",
+                  },
+                ]}
+              />
             </View>
-          </View>
-        </View>
+
+            <View style={styles.rowBetween}>
+              <Text style={styles.label}>Orcamento Restante</Text>
+              <Text style={styles.label}>Valor Gasto</Text>
+            </View>
+
+            <View style={styles.rowBetween}>
+              <Text
+                style={[
+                  styles.labelValue,
+                  orcamentoRestante < 0 && styles.labelValueNegative,
+                ]}>
+                {formatarMoeda(orcamentoRestante)}
+              </Text>
+              <Text style={styles.labelValue}>{formatarMoeda(valorGasto)}</Text>
+            </View>
+
+          </Animated.View>
+        </Animated.View>
 
         <TouchableOpacity
-          style={styles.onMarketButton}
-          onPress={() => router.push("/(tabs)/on-market")}>
-          <Text style={styles.onMarketButtonText}>Abrir On Market</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.addButton}
+          style={styles.finishButton}
           onPress={() => {
-            if (!saindoRef.current) {
-              router.push("/(tabs)/add");
-            }
-          }}
-          activeOpacity={0.7}>
-          <Text style={styles.addText}>+</Text>
+            if (saindo) return;
+            router.push("/(tabs)/finalizar-compra");
+          }}>
+          <Text style={styles.finishButtonText}>Finalizar Compra</Text>
         </TouchableOpacity>
+
+        <Animated.ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoriesScroll}
+          contentContainerStyle={styles.categoriesContainer}>
+          {/* "Tudo" reaproveita a mesma listagem sem criar uma categoria extra no banco. */}
+          {["Tudo", ...categorias].map((categoria) => (
+            <TouchableOpacity
+              key={categoria}
+              style={[
+                styles.category,
+                categoriaAtiva === categoria && styles.categoryActive,
+              ]}
+              onPress={() => setCategoriaAtiva(categoria)}>
+              <Text
+                style={[
+                  styles.categoryText,
+                  categoriaAtiva === categoria && styles.categoryTextActive,
+                ]}>
+                {categoria}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </Animated.ScrollView>
+
+        <Animated.ScrollView
+          style={styles.listaContainer}
+          showsVerticalScrollIndicator={false}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          contentContainerStyle={styles.listaContent}>
+          {items.length === 0 && categoriaAtiva === "Tudo" ? (
+            <AppEmptyState
+              title="Sua primeira lista comeca aqui"
+              description="Organize suas compras em segundos"
+              buttonLabel="Criar lista"
+              onPress={() => router.push("/(tabs)/add")}
+            />
+          ) : itemsFiltrados.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>Nenhum item encontrado nesta categoria</Text>
+            </View>
+          ) : (
+            // Os controles alteram apenas o estado global; o contexto cuida da persistencia no Firestore.
+            itemsFiltrados.map((item) => (
+              <View key={item.id} style={styles.item}>
+                <View style={styles.itemInfo}>
+                  <View style={[styles.badge, { backgroundColor: item.cor }]}>
+                    <Text style={styles.badgeText}>{item.nome}</Text>
+                  </View>
+                  <View style={styles.itemTotals}>
+                    <Text style={styles.itemValor}>
+                      {formatarMoeda(item.quantidade * item.valorUnitario)}
+                    </Text>
+                    <Text style={styles.itemUnitario}>
+                      {formatarMoeda(item.valorUnitario)} por unidade
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.actions}>
+                  <TouchableOpacity
+                    style={styles.btnSmall}
+                    onPress={() => incrementarQuantidade(item.id)}>
+                    <Text style={styles.btnText}>+</Text>
+                  </TouchableOpacity>
+
+                  <Text style={styles.qty}>{item.quantidade}</Text>
+
+                  <TouchableOpacity
+                    style={styles.btnSmall}
+                    onPress={() => decrementarQuantidade(item.id)}>
+                    <Text style={styles.btnText}>-</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.delete}
+                    onPress={() => deletarItem(item.id)}>
+                    <Text style={styles.deleteText}>x</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+        </Animated.ScrollView>
+
+        <View style={styles.bottomActions}>
+          <TouchableOpacity
+            style={styles.onMarketButton}
+            onPress={() => {
+              if (saindo) return;
+              router.push("/(tabs)/on-market");
+            }}
+            activeOpacity={0.7}>
+            <Text style={styles.onMarketText}>ON MARKET</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => {
+              if (saindo) return;
+              router.push("/(tabs)/add");
+            }}
+            activeOpacity={0.7}>
+            <Text style={styles.addText}>+</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </LinearGradient>
   );
@@ -208,12 +388,77 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
+  compactableHeader: {
+    overflow: "hidden",
+  },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    minHeight: 40,
-    marginBottom: 8,
+    marginBottom: 10,
+  },
+  headerActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  iconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#eef3f0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  helpIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#9ee0a2",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  helpIconInner: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  helpIconText: {
+    color: "#111",
+    fontSize: 24,
+    lineHeight: 24,
+    fontWeight: "900",
+  },
+  settingsIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#2f5d45",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  settingsIconText: {
+    color: "#9ee0a2",
+    fontSize: 24,
+    lineHeight: 24,
+    fontWeight: "900",
   },
   logoutButton: {
     flexDirection: "row",
@@ -231,21 +476,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "bold",
     textAlign: "center",
     color: "#2f5d45",
   },
   month: {
     textAlign: "center",
-    color: "#666",
-    marginBottom: 14,
+    color: "#5d6d65",
+    marginBottom: 18,
     fontSize: 14,
   },
   orcamentoEditor: {
     backgroundColor: "#dce7e0",
     borderRadius: 18,
     padding: 12,
+    borderWidth: 1,
+    borderColor: "#d0ddd6",
   },
   orcamentoLabel: {
     fontSize: 13,
@@ -278,10 +525,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   value: {
-    fontSize: 34,
+    fontSize: 38,
     fontWeight: "bold",
     textAlign: "center",
-    marginVertical: 14,
+    marginVertical: 16,
     color: "#2f5d45",
   },
   progressContainer: {
@@ -312,6 +559,18 @@ const styles = StyleSheet.create({
   labelValueNegative: {
     color: "#c0392b",
   },
+  finishButton: {
+    marginTop: 16,
+    backgroundColor: "#2f5d45",
+    borderRadius: 14,
+    paddingVertical: 13,
+    alignItems: "center",
+  },
+  finishButtonText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 14,
+  },
   categoriesScroll: {
     marginTop: 20,
     flexGrow: 0,
@@ -340,6 +599,9 @@ const styles = StyleSheet.create({
   listaContainer: {
     marginTop: 20,
     flex: 1,
+  },
+  listaContent: {
+    paddingBottom: 110,
   },
   item: {
     marginBottom: 12,
@@ -426,10 +688,37 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
-  addButton: {
+  bottomActions: {
     position: "absolute",
     bottom: 20,
     alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  onMarketButton: {
+    backgroundColor: "#dce7e0",
+    borderRadius: 28,
+    paddingHorizontal: 18,
+    height: 56,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.16,
+    shadowRadius: 3.84,
+    elevation: 4,
+  },
+  onMarketText: {
+    color: "#2f5d45",
+    fontWeight: "800",
+    fontSize: 13,
+    letterSpacing: 0.3,
+  },
+  addButton: {
     backgroundColor: "#2f5d45",
     width: 56,
     height: 56,
@@ -458,56 +747,6 @@ const styles = StyleSheet.create({
     color: "#999",
     fontSize: 14,
     textAlign: "center",
-  },
-  flowCard: {
-    backgroundColor: "#fff",
-    borderRadius: 18,
-    padding: 16,
-    marginTop: 20,
-    gap: 10,
-  },
-  flowTitle: {
-    color: "#2f5d45",
-    fontSize: 17,
-    fontWeight: "800",
-  },
-  flowText: {
-    color: "#62756a",
-    fontSize: 13,
-  },
-  flowStats: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  flowStat: {
-    flex: 1,
-    backgroundColor: "#e8f2ec",
-    borderRadius: 14,
-    padding: 12,
-    alignItems: "center",
-  },
-  flowStatValue: {
-    color: "#2f5d45",
-    fontSize: 24,
-    fontWeight: "900",
-    fontVariant: ["tabular-nums"],
-  },
-  flowStatLabel: {
-    color: "#607168",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  onMarketButton: {
-    backgroundColor: "#2f5d45",
-    borderRadius: 16,
-    paddingVertical: 15,
-    alignItems: "center",
-    marginTop: 14,
-  },
-  onMarketButtonText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "800",
   },
   loadingCard: {
     width: "84%",

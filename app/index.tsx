@@ -1,11 +1,12 @@
 import { useRouter } from "expo-router";
 import {
   createUserWithEmailAndPassword,
+  onAuthStateChanged,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   StyleSheet,
@@ -15,12 +16,13 @@ import {
   View,
 } from "react-native";
 
-import { BackButton } from "@/components/back-button";
 import { auth, db } from "../firebaseConfig";
+import { trackEvent } from "@/src/services/analyticsService";
+import { ensureUserSubscriptionProfile } from "@/src/services/subscriptionService";
 
 const garantirEstruturaUsuario = async (uid: string, email: string) => {
-  const perfilRef = doc(db, "users", uid);
-  const orcamentoRef = doc(db, "users", uid, "budget", "current");
+  const perfilRef = doc(db, "usuarios", uid);
+  const orcamentoRef = doc(db, "usuarios", uid, "orcamento", "atual");
   const perfilSnapshot = await getDoc(perfilRef);
   const orcamentoSnapshot = await getDoc(orcamentoRef);
 
@@ -53,13 +55,25 @@ const garantirEstruturaUsuario = async (uid: string, email: string) => {
       orcamentoRef,
       {
         orcamentoTotal: 0,
+        items: [],
         criadoEm: serverTimestamp(),
         atualizadoEm: serverTimestamp(),
       },
       { merge: true }
     );
   }
+
+  await ensureUserSubscriptionProfile({
+    uid,
+    email,
+    name: auth.currentUser?.displayName,
+  });
 };
+
+const getCodigoErro = (error: unknown) =>
+  typeof error === "object" && error !== null && "code" in error
+    ? String(error.code)
+    : "";
 
 export default function Login() {
   const router = useRouter();
@@ -71,6 +85,16 @@ export default function Login() {
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false);
 
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (usuario) => {
+      if (usuario) {
+        router.replace("/(tabs)");
+      }
+    });
+
+    return unsubscribe;
+  }, [router]);
+
   const handleLogin = async () => {
     if (!email || !senha) {
       alert("Preencha email e senha");
@@ -78,20 +102,25 @@ export default function Login() {
     }
 
     try {
-      // O login apenas autentica; a leitura do perfil e do orcamento acontece no contexto global.
       setCarregando(true);
       const credencial = await signInWithEmailAndPassword(auth, email.trim(), senha);
-      await garantirEstruturaUsuario(credencial.user.uid, credencial.user.email ?? email.trim());
-
-      router.replace("/(tabs)");
+      trackEvent("login", { method: "email" }).catch(() => undefined);
+      try {
+        await garantirEstruturaUsuario(credencial.user.uid, credencial.user.email ?? email.trim());
+      } catch {
+        // Se a autenticacao funcionou mas o Firestore falhou, ainda deixamos o usuario entrar.
+      }
     } catch (error: unknown) {
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        error.code === "auth/invalid-credential"
-      ) {
+      const codigoErro = getCodigoErro(error);
+
+      if (codigoErro === "auth/invalid-credential" || codigoErro === "auth/wrong-password") {
         alert("Email ou senha incorretos");
+      } else if (codigoErro === "auth/user-not-found") {
+        alert("Conta nao encontrada");
+      } else if (codigoErro === "auth/invalid-email") {
+        alert("Email invalido");
+      } else if (codigoErro === "auth/too-many-requests") {
+        alert("Muitas tentativas. Tente novamente em instantes.");
       } else {
         alert("Nao foi possivel entrar agora");
       }
@@ -119,17 +148,21 @@ export default function Login() {
     try {
       setCarregando(true);
       const credencial = await createUserWithEmailAndPassword(auth, email.trim(), senha);
-      await garantirEstruturaUsuario(credencial.user.uid, credencial.user.email ?? email.trim());
-
-      router.replace("/(tabs)");
+      trackEvent("sign_up", { method: "email" }).catch(() => undefined);
+      try {
+        await garantirEstruturaUsuario(credencial.user.uid, credencial.user.email ?? email.trim());
+      } catch {
+        // Mantemos a conta criada e o usuario autenticado mesmo se a estrutura inicial falhar.
+      }
     } catch (error: unknown) {
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        error.code === "auth/email-already-in-use"
-      ) {
+      const codigoErro = getCodigoErro(error);
+
+      if (codigoErro === "auth/email-already-in-use") {
         alert("Esse email ja esta cadastrado");
+      } else if (codigoErro === "auth/invalid-email") {
+        alert("Email invalido");
+      } else if (codigoErro === "auth/weak-password") {
+        alert("A senha deve ter pelo menos 6 caracteres");
       } else {
         alert("Nao foi possivel criar a conta");
       }
@@ -178,7 +211,6 @@ export default function Login() {
 
   return (
     <View style={styles.container}>
-      <BackButton fallback="/" style={styles.loginBackButton} />
       {/* A mesma tela alterna entre login e registro para simplificar a entrada no app. */}
       <Text style={styles.title}>Smarket</Text>
       <Text style={styles.subtitle}>
@@ -281,11 +313,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 20,
     backgroundColor: "#f3f5f4",
-  },
-  loginBackButton: {
-    position: "absolute",
-    top: 54,
-    left: 20,
   },
   title: {
     fontSize: 28,

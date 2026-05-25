@@ -1,5 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { useEffect, useState } from "react";
@@ -8,17 +8,18 @@ import "react-native-reanimated";
 
 import { BudgetProvider } from "@/context/budget-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { SubscriptionProvider } from "@/src/context/subscription-context";
+import { identifyAnalyticsUser } from "@/src/services/analyticsService";
+import { syncOnboardingStatus } from "@/src/services/onboardingService";
+import { requestNotificationsPermission } from "@/src/services/notificationService";
+import { updateUserAppPreferences } from "@/src/services/subscriptionService";
 import { auth } from "../firebaseConfig";
-
-export const unstable_settings = {
-  anchor: "(tabs)",
-};
+import OnboardingScreen from "./onboarding";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const router = useRouter();
-  const segments = useSegments();
   const [usuario, setUsuario] = useState<User | null | undefined>(undefined);
+  const [onboardingConcluido, setOnboardingConcluido] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (authUser) => {
@@ -29,36 +30,69 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (usuario === undefined) {
+    let ativo = true;
+
+    const carregarOnboarding = async () => {
+      const status = await syncOnboardingStatus(usuario?.uid);
+
+      if (ativo) {
+        setOnboardingConcluido(status);
+      }
+    };
+
+    carregarOnboarding();
+
+    return () => {
+      ativo = false;
+    };
+  }, [usuario?.uid]);
+
+  useEffect(() => {
+    if (!usuario) {
       return;
     }
 
-    const estaNasTabs = segments[0] === "(tabs)";
+    identifyAnalyticsUser(usuario.uid).catch(() => undefined);
+  }, [usuario]);
 
-    if (!usuario && estaNasTabs) {
-      router.replace("/");
+  useEffect(() => {
+    if (!usuario || onboardingConcluido !== true) {
       return;
     }
 
-    // Mesmo com sessao salva, a rota inicial continua sendo o login.
-    // O usuario so entra nas tabs depois de tocar em "Entrar".
-  }, [router, segments, usuario]);
+    requestNotificationsPermission()
+      .then((granted) =>
+        updateUserAppPreferences(usuario.uid, {
+          notificationsEnabled: granted,
+        })
+      )
+      .catch(() => undefined);
+  }, [onboardingConcluido, usuario]);
 
-  if (usuario === undefined) {
+  if (usuario === undefined || onboardingConcluido === undefined) {
     return <View style={{ flex: 1, backgroundColor: "#f3f5f4" }} />;
   }
 
   return (
     // O provider envolve toda a navegacao para que qualquer tela acesse os dados do usuario logado.
-    <BudgetProvider>
-      <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
-        </Stack>
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </BudgetProvider>
+    <SubscriptionProvider>
+      <BudgetProvider>
+        <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+          {!onboardingConcluido ? (
+            <OnboardingScreen onComplete={() => setOnboardingConcluido(true)} />
+          ) : (
+            <Stack key={usuario ? "app" : "auth"} screenOptions={{ headerShown: false }}>
+              {usuario ? (
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              ) : (
+                <Stack.Screen name="index" options={{ headerShown: false }} />
+              )}
+              <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
+            </Stack>
+          )}
+          <StatusBar style="auto" />
+        </ThemeProvider>
+      </BudgetProvider>
+    </SubscriptionProvider>
   );
 }

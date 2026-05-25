@@ -1,14 +1,14 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
 import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 
-import { BackButton } from "@/components/back-button";
 import { Categoria, useBudget } from "@/context/budget-context";
 
 const formatarMoeda = (valor: number) =>
@@ -18,6 +18,7 @@ const formatarMoeda = (valor: number) =>
   });
 
 export default function CategoriaDetalheScreen() {
+  const router = useRouter();
   const params = useLocalSearchParams<{ categoria?: string }>();
   // A rota dinamica chega como string; aqui convertemos para o tipo usado pelo contexto.
   const categoria = (params.categoria ?? "Mercado") as Categoria;
@@ -39,9 +40,9 @@ export default function CategoriaDetalheScreen() {
     <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
-          <View style={styles.topBar}>
-            <BackButton fallback="/(tabs)/gastos" />
-          </View>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Text style={styles.backButtonText}>Voltar</Text>
+          </TouchableOpacity>
 
           <Text style={styles.title}>{categoria}</Text>
           <Text style={styles.subtitle}>Detalhes do que foi gasto nessa categoria</Text>
@@ -61,11 +62,11 @@ export default function CategoriaDetalheScreen() {
                 <View>
                   <Text style={styles.itemName}>{item.nome}</Text>
                   <Text style={styles.itemMeta}>
-                    {item.quantidade} x {formatarMoeda(item.valorUnitario ?? 0)}
+                    {item.quantidade} x {formatarMoeda(item.valorUnitario)}
                   </Text>
                 </View>
                 <Text style={styles.itemTotal}>
-                  {formatarMoeda(item.subtotal ?? item.quantidade * (item.valorUnitario ?? 0))}
+                  {formatarMoeda(item.quantidade * item.valorUnitario)}
                 </Text>
               </View>
             ))
@@ -100,12 +101,15 @@ const styles = StyleSheet.create({
   },
   backButton: {
     alignSelf: "flex-start",
+    backgroundColor: "#d7dfda",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     marginBottom: 18,
   },
-  topBar: {
-    minHeight: 32,
-    alignItems: "flex-start",
-    marginBottom: 12,
+  backButtonText: {
+    color: "#3f5d4d",
+    fontWeight: "700",
   },
   title: {
     fontSize: 28,
