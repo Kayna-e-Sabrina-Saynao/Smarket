@@ -6,7 +6,6 @@ const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestor
 initializeApp();
 
 const db = getFirestore();
-const OWNER_EMAIL = "laydepaz1@gmail.com";
 const PRO_PRODUCT_ID = "smarket_pro_monthly";
 const FAMILY_PRODUCT_ID = "smarket_family_monthly";
 
@@ -161,22 +160,4 @@ exports.syncUserSubscriptionState = onCall(async (request) => {
   );
 
   return { ok: true };
-});
-
-exports.applyUltimateClaimsToOwner = onCall(async (request) => {
-  if (!isAdminToken(request.auth)) {
-    throw new HttpsError("permission-denied", "Acesso administrativo necessario.");
-  }
-
-  const ownerUser = await getAuth().getUserByEmail(OWNER_EMAIL);
-
-  await getAuth().setCustomUserClaims(ownerUser.uid, {
-    ultimate: true,
-    admin: true,
-  });
-
-  return {
-    ok: true,
-    uid: ownerUser.uid,
-  };
 });

@@ -1,35 +1,23 @@
-import { LinearGradient } from "expo-linear-gradient";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { CompraHistorico, useBudget } from "@/context/budget-context";
-import { IconSymbol } from "@/components/ui/icon-symbol";
 import { PremiumFeatureModal } from "@/src/components/PremiumFeatureModal";
 import { PremiumLockedState } from "@/src/components/PremiumLockedState";
+import { PremiumButton } from "@/src/components/premium/PremiumButton";
+import { PremiumCard } from "@/src/components/premium/PremiumCard";
+import { PremiumScreen } from "@/src/components/premium/PremiumScreen";
+import { useCycle } from "@/src/context/CycleContext";
 import { useSubscription } from "@/src/context/subscription-context";
+import {
+  premiumColors,
+  premiumRadius,
+  premiumShadows,
+  premiumSpacing,
+} from "@/src/theme/premium-ui";
 import { canViewHistory, canViewStats } from "@/src/utils/planPermissions";
-
-const MESES = [
-  "Janeiro",
-  "Fevereiro",
-  "Marco",
-  "Abril",
-  "Maio",
-  "Junho",
-  "Julho",
-  "Agosto",
-  "Setembro",
-  "Outubro",
-  "Novembro",
-  "Dezembro",
-];
 
 const formatarMoeda = (valor: number) =>
   valor.toLocaleString("pt-BR", {
@@ -51,12 +39,12 @@ const gastoCategoriasTexto = (compra: CompraHistorico) =>
 export default function Gastos() {
   const router = useRouter();
   const params = useLocalSearchParams<{ data?: string | string[]; success?: string | string[] }>();
-  const { carregandoDados, historicoCompras, cicloAno } = useBudget();
+  const { carregandoDados, historicoCompras } = useBudget();
   const { currentPlan, subscriptionLoading, isUltimate } = useSubscription();
+  const { currentMonth, currentYear, cycleLoading, cycleUpdating, getCurrentCycle } = useCycle();
   const [premiumModalVisible, setPremiumModalVisible] = useState(false);
   const [premiumNoticeShown, setPremiumNoticeShown] = useState(false);
-  const dataAtual = new Date();
-  const mesAtual = dataAtual.getMonth();
+  const listaSelecionada = null;
   const dataSelecionada = Array.isArray(params.data) ? params.data[0] : params.data;
   const compraFinalizadaComSucesso = Array.isArray(params.success)
     ? params.success[0] === "1"
@@ -73,29 +61,23 @@ export default function Gastos() {
     setPremiumNoticeShown(true);
   }, [premiumBlocked, premiumNoticeShown, subscriptionLoading]);
 
-  const comprasFiltradas = useMemo(
-    () => {
-      if (dataSelecionada) {
-        return historicoCompras.filter((compra) => compra.data === dataSelecionada);
-      }
+  const comprasFiltradas = useMemo(() => {
+    if (dataSelecionada) {
+      return historicoCompras.filter((compra) => compra.data === dataSelecionada);
+    }
 
-      return historicoCompras.filter((compra) => {
-        const [ano, mes] = compra.data.split("-").map(Number);
-        return ano === cicloAno && mes - 1 === mesAtual;
-      });
-    },
-    [cicloAno, dataSelecionada, historicoCompras, mesAtual]
-  );
+    return historicoCompras.filter((compra) => {
+      const [ano, mes] = compra.data.split("-").map(Number);
+      return ano === currentYear && mes - 1 === currentMonth;
+    });
+  }, [currentMonth, currentYear, dataSelecionada, historicoCompras]);
 
   const maiorCategoria = useMemo<{ nome: string; valor: number } | null>(() => {
     const acumulado = new Map<string, number>();
 
     comprasFiltradas.forEach((compra) => {
       compra.gastoPorCategoria.forEach((categoria) => {
-        acumulado.set(
-          categoria.nome,
-          (acumulado.get(categoria.nome) ?? 0) + categoria.valor
-        );
+        acumulado.set(categoria.nome, (acumulado.get(categoria.nome) ?? 0) + categoria.valor);
       });
     });
 
@@ -110,23 +92,22 @@ export default function Gastos() {
     return categoriaTop;
   }, [comprasFiltradas]);
 
-  const subtitulo = dataSelecionada
-    ? formatarData(dataSelecionada)
-    : `${MESES[mesAtual]} ${cicloAno}`;
+  const subtitulo = dataSelecionada ? formatarData(dataSelecionada) : getCurrentCycle().fullLabel;
 
-  if (carregandoDados || subscriptionLoading) {
+  if (carregandoDados || subscriptionLoading || cycleLoading) {
     return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
-        <View style={styles.loadingCard}>
-          <Text style={styles.loadingText}>Carregando compras do mes...</Text>
-        </View>
-      </LinearGradient>
+      <PremiumScreen scroll={false}>
+        <PremiumCard style={styles.loadingCard}>
+          <ActivityIndicator size="small" color={premiumColors.primary} />
+          <Text style={styles.loadingText}>Carregando compras do periodo...</Text>
+        </PremiumCard>
+      </PremiumScreen>
     );
   }
 
   if (premiumBlocked) {
     return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+      <PremiumScreen scroll={false}>
         <PremiumLockedState
           title="Historico e estatisticas sao premium"
           description="No plano Gratis, voce continua usando sua lista principal. Para ver historico completo e estatisticas, escolha Pro ou Familia."
@@ -143,7 +124,7 @@ export default function Gastos() {
             router.push("/(tabs)/planos");
           }}
         />
-      </LinearGradient>
+      </PremiumScreen>
     );
   }
 
@@ -206,39 +187,59 @@ export default function Gastos() {
   }
 
   return (
-    <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <View style={styles.headerIcon}>
-            <IconSymbol name="chart.bar.fill" size={24} color="#2f5d45" />
+    <PremiumScreen scroll={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+        <PremiumCard style={styles.headerCard}>
+          <View style={styles.headerTopRow}>
+            <View style={styles.headerBadge}>
+              <MaterialIcons name="query-stats" size={22} color={premiumColors.primary} />
+            </View>
+
+            <TouchableOpacity style={styles.calendarLink} onPress={() => router.push("/(tabs)/historico")}>
+              <MaterialIcons name="calendar-month" size={18} color={premiumColors.primary} />
+              <Text style={styles.calendarLinkText}>Calendario</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.title}>
-            {dataSelecionada ? "Compras do Dia" : "Compras do Mes"}
-          </Text>
+
+          <Text style={styles.title}>{dataSelecionada ? "Compras do Dia" : "Compras do Mes"}</Text>
           <Text style={styles.subtitle}>{subtitulo}</Text>
 
-          <TouchableOpacity
-            style={styles.historyButton}
-            onPress={() => router.push("/(tabs)/historico")}>
-            <Text style={styles.historyButtonText}>Historico com calendario</Text>
-          </TouchableOpacity>
-
-          {dataSelecionada ? (
-            <TouchableOpacity
-              style={styles.clearFilterButton}
-              onPress={() => router.replace("/(tabs)/gastos")}>
-              <Text style={styles.clearFilterButtonText}>Voltar para o mes atual</Text>
-            </TouchableOpacity>
+          {cycleUpdating && !dataSelecionada ? (
+            <View style={styles.inlineLoading}>
+              <ActivityIndicator size="small" color={premiumColors.primary} />
+              <Text style={styles.inlineLoadingText}>Atualizando periodo selecionado...</Text>
+            </View>
           ) : null}
-        </View>
+
+          <View style={styles.headerActions}>
+            <PremiumButton
+              label="Historico com calendario"
+              onPress={() => router.push("/(tabs)/historico")}
+              style={styles.actionButton}
+            />
+            {dataSelecionada ? (
+              <PremiumButton
+                secondary
+                label="Voltar para o mes atual"
+                onPress={() => router.replace("/(tabs)/gastos")}
+                style={styles.actionButton}
+              />
+            ) : null}
+          </View>
+        </PremiumCard>
 
         {compraFinalizadaComSucesso ? (
-          <View style={styles.successCard}>
-            <Text style={styles.successTitle}>Compra finalizada com sucesso</Text>
-            <Text style={styles.successText}>
-              A compra foi guardada no historico e carregada nesta data.
-            </Text>
-          </View>
+          <PremiumCard style={styles.successCard}>
+            <View style={styles.successIcon}>
+              <MaterialIcons name="check-circle" size={20} color={premiumColors.primary} />
+            </View>
+            <View style={styles.successContent}>
+              <Text style={styles.successTitle}>Compra finalizada com sucesso</Text>
+              <Text style={styles.successText}>
+                A compra foi guardada no historico e carregada nesta data.
+              </Text>
+            </View>
+          </PremiumCard>
         ) : null}
 
         <View style={styles.listHeader}>
@@ -247,20 +248,23 @@ export default function Gastos() {
         </View>
 
         {comprasFiltradas.length === 0 ? (
-          <View style={styles.emptyCard}>
+          <PremiumCard style={styles.emptyCard}>
+            <View style={styles.emptyIcon}>
+              <MaterialIcons name="shopping-bag" size={22} color={premiumColors.primary} />
+            </View>
             <Text style={styles.emptyTitle}>
               {dataSelecionada ? "Nenhuma compra nessa data" : "Nenhuma compra neste mes"}
             </Text>
             <Text style={styles.emptyText}>
               Finalize uma compra para ela aparecer aqui com resumo e historico.
             </Text>
-          </View>
+          </PremiumCard>
         ) : (
           comprasFiltradas.map((compra) => (
             <TouchableOpacity
               key={compra.id}
               style={styles.purchaseCard}
-              activeOpacity={0.8}
+              activeOpacity={0.9}
               onPress={() =>
                 router.push({
                   pathname: "/(tabs)/compra/[id]",
@@ -295,137 +299,168 @@ export default function Gastos() {
           ))
         )}
 
-        <View style={styles.tipCard}>
+        <PremiumCard style={styles.tipCard}>
+          <View style={styles.tipIcon}>
+            <MaterialIcons name="insights" size={20} color={premiumColors.primary} />
+          </View>
           <Text style={styles.tipTitle}>Resumo rapido</Text>
           <Text style={styles.tipText}>
             {maiorCategoria
               ? `A categoria que voce mais gasta e ${maiorCategoria.nome}, com ${formatarMoeda(maiorCategoria.valor)} neste periodo.`
               : "Conclua compras para ver qual categoria mais pesa no seu periodo selecionado."}
           </Text>
-        </View>
-
-        <View style={styles.bottomSpacer} />
+        </PremiumCard>
       </ScrollView>
-    </LinearGradient>
+    </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  content: {
+    paddingBottom: premiumSpacing.lg,
+    gap: premiumSpacing.sm,
   },
-  card: {
-    backgroundColor: "#e9eceb",
-    padding: 22,
-    borderRadius: 26,
+  loadingCard: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    minHeight: 180,
+  },
+  loadingText: {
+    color: premiumColors.text,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  headerCard: {
+    gap: premiumSpacing.sm,
+  },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  headerBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: premiumColors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  calendarLink: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumRadius.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
-  headerIcon: {
-    alignItems: "center",
-  },
-  headerIcon: {
-    alignItems: "center",
-    marginBottom: 10,
+  calendarLinkText: {
+    color: premiumColors.primary,
+    fontWeight: "700",
+    fontSize: 13,
   },
   title: {
-    fontSize: 24,
-    fontWeight: "900",
-    textAlign: "center",
-    color: "#2f5d45",
+    color: premiumColors.text,
+    fontSize: 30,
+    fontWeight: "800",
   },
   subtitle: {
-    textAlign: "center",
-    color: "#666",
-    marginTop: 5,
-    fontSize: 14,
-    marginBottom: 18,
+    color: premiumColors.textSecondary,
+    fontSize: 15,
+    marginTop: -8,
   },
-  historyButton: {
-    backgroundColor: "#2f5d45",
-    borderRadius: 14,
-    paddingVertical: 13,
+  inlineLoading: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 8,
   },
-  historyButtonText: {
-    color: "#fff",
-    fontWeight: "700",
+  inlineLoadingText: {
+    color: premiumColors.textSecondary,
+    fontSize: 13,
   },
-  clearFilterButton: {
-    marginTop: 10,
-    backgroundColor: "#dce7e0",
-    borderRadius: 12,
-    paddingVertical: 11,
-    alignItems: "center",
+  headerActions: {
+    gap: 12,
   },
-  clearFilterButtonText: {
-    color: "#2f5d45",
-    fontWeight: "700",
-  },
-  listHeader: {
-    marginHorizontal: 20,
-    marginBottom: 15,
-    marginTop: 10,
+  actionButton: {
+    width: "100%",
   },
   successCard: {
-    backgroundColor: "#dce7e0",
-    marginHorizontal: 20,
-    marginBottom: 14,
-    padding: 16,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    backgroundColor: premiumColors.successSoft,
+    borderColor: "#BBF7D0",
+  },
+  successIcon: {
+    width: 36,
+    height: 36,
     borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#b9d1c3",
+    backgroundColor: premiumColors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  successContent: {
+    flex: 1,
   },
   successTitle: {
-    color: "#2f5d45",
+    color: premiumColors.text,
     fontWeight: "800",
     fontSize: 15,
     marginBottom: 4,
   },
   successText: {
-    color: "#5b6f64",
-    lineHeight: 19,
+    color: premiumColors.textSecondary,
+    lineHeight: 20,
+  },
+  listHeader: {
+    paddingHorizontal: 4,
+    marginTop: 4,
   },
   listTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "900",
+    color: premiumColors.text,
+    fontWeight: "800",
+    fontSize: 19,
   },
   listSubtitle: {
-    fontSize: 12,
+    color: premiumColors.textSecondary,
+    fontSize: 13,
     marginTop: 3,
   },
   emptyCard: {
-    backgroundColor: "#e9eceb",
-    marginHorizontal: 20,
-    padding: 20,
-    borderRadius: 20,
     alignItems: "center",
+    gap: 10,
+    paddingVertical: 28,
+  },
+  emptyIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: premiumColors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyTitle: {
-    color: "#2f5d45",
-    fontWeight: "700",
+    color: premiumColors.text,
+    fontWeight: "800",
     fontSize: 18,
-    marginBottom: 8,
+    textAlign: "center",
   },
   emptyText: {
-    color: "#6c7a73",
+    color: premiumColors.textSecondary,
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 22,
   },
   purchaseCard: {
-    backgroundColor: "#fff",
-    marginHorizontal: 20,
+    backgroundColor: premiumColors.surface,
+    borderRadius: premiumRadius.lg,
+    padding: premiumSpacing.sm,
+    borderWidth: 1,
+    borderColor: premiumColors.border,
+    boxShadow: premiumShadows.card,
     marginBottom: 12,
-    padding: 16,
-    borderRadius: 18,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   purchaseHeader: {
     flexDirection: "row",
@@ -436,89 +471,76 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   purchaseName: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#2f5d45",
+    fontSize: 18,
+    fontWeight: "800",
+    color: premiumColors.text,
   },
   purchaseDate: {
     marginTop: 4,
-    color: "#66766d",
+    color: premiumColors.textSecondary,
     fontSize: 13,
   },
   purchaseBuyer: {
-    marginTop: 6,
-    color: "#2f5d45",
+    marginTop: 8,
+    color: premiumColors.primary,
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   purchaseTotal: {
-    color: "#2f5d45",
+    color: premiumColors.text,
     fontWeight: "800",
-    fontSize: 15,
+    fontSize: 16,
   },
   statsRow: {
     flexDirection: "row",
     gap: 10,
-    marginTop: 14,
+    marginTop: 16,
   },
   statPill: {
     flex: 1,
-    backgroundColor: "#eef3f0",
-    borderRadius: 14,
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumRadius.md,
     padding: 12,
   },
   statLabel: {
-    color: "#6a7a72",
+    color: premiumColors.textSecondary,
     fontSize: 12,
-    marginBottom: 4,
+    marginBottom: 5,
   },
   statValue: {
-    color: "#2f5d45",
+    color: premiumColors.text,
     fontWeight: "700",
     fontSize: 14,
   },
   categorySummaryLabel: {
-    marginTop: 14,
-    color: "#486756",
+    marginTop: 16,
+    color: premiumColors.text,
     fontWeight: "700",
     marginBottom: 6,
   },
   categorySummaryText: {
-    color: "#5f6f66",
+    color: premiumColors.textSecondary,
     lineHeight: 20,
   },
   tipCard: {
-    backgroundColor: "#fff6dc",
-    marginHorizontal: 20,
-    marginTop: 8,
-    padding: 16,
-    borderRadius: 18,
-    borderLeftWidth: 4,
-    borderLeftColor: "#d4a83d",
+    gap: 8,
+    backgroundColor: "#FFFBEB",
+    borderColor: "#FDE68A",
+  },
+  tipIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: premiumColors.surface,
+    alignItems: "center",
+    justifyContent: "center",
   },
   tipTitle: {
-    color: "#2f5d45",
+    color: premiumColors.text,
     fontWeight: "800",
-    marginBottom: 6,
   },
   tipText: {
-    color: "#5f6f66",
-    lineHeight: 20,
-  },
-  bottomSpacer: {
-    height: 20,
-  },
-  loadingCard: {
-    flex: 1,
-    margin: 20,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#e9eceb",
-    borderRadius: 24,
-  },
-  loadingText: {
-    color: "#2f5d45",
-    fontSize: 16,
-    fontWeight: "600",
+    color: premiumColors.textSecondary,
+    lineHeight: 21,
   },
 });

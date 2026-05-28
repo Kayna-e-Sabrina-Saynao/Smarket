@@ -2,16 +2,18 @@ import { Redirect, Tabs } from "expo-router";
 import { onAuthStateChanged, User } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import { View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { Colors } from "@/constants/theme";
-import { useColorScheme } from "@/hooks/use-color-scheme";
+import { premiumColors } from "@/src/theme/premium-ui";
 import { auth } from "../../firebaseConfig";
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
   const [usuario, setUsuario] = useState<User | null | undefined>(undefined);
+  const insets = useSafeAreaInsets();
+  const tabBarPaddingBottom = insets.bottom > 0 ? insets.bottom - 2 : 10;
+  const tabBarHeight = 68 + tabBarPaddingBottom;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (authUser) => {
@@ -32,35 +34,56 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
+        tabBarActiveTintColor: premiumColors.primary,
+        tabBarInactiveTintColor: premiumColors.textSecondary,
         headerShown: false,
         tabBarButton: HapticTab,
-        tabBarShowLabel: false,
+        tabBarHideOnKeyboard: true,
+        tabBarShowLabel: true,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: "600",
+          marginBottom: 4,
+        },
         tabBarStyle: {
-          backgroundColor: "#10261c",
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: premiumColors.surface,
           borderTopWidth: 0,
-          height: 68,
+          boxShadow: "0 -10px 24px rgba(17,24,39,0.06)",
+          height: tabBarHeight,
           paddingTop: 8,
+          paddingBottom: tabBarPaddingBottom,
+        },
+        tabBarItemStyle: {
+          justifyContent: "center",
+          alignItems: "center",
+          paddingVertical: 6,
+          borderTopWidth: 3,
+          borderTopColor: "transparent",
+          marginHorizontal: 8,
         },
       }}>
       <Tabs.Screen
         name="index"
         options={{
-          title: "Orcamento",
+          title: "Home",
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
         }}
       />
       <Tabs.Screen
         name="gastos"
         options={{
-          title: "Gastos",
+          title: "Estatisticas",
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.bar.fill" color={color} />,
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
-          title: "Dashboard",
+          title: "Listas",
           tabBarIcon: ({ color }) => (
             <IconSymbol size={26} name="square.grid.2x2.fill" color={color} />
           ),

@@ -1,4 +1,4 @@
-import { LinearGradient } from "expo-linear-gradient";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
@@ -9,9 +9,14 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 
 import { OnMarketItem, useBudget } from "@/context/budget-context";
+import { PremiumButton } from "@/src/components/premium/PremiumButton";
+import { PremiumCard } from "@/src/components/premium/PremiumCard";
+import { PremiumScreen } from "@/src/components/premium/PremiumScreen";
+import { premiumColors, premiumRadius, premiumShadows, premiumSpacing } from "@/src/theme/premium-ui";
 
 const FILTROS_CATEGORIA = [
   "Todas",
@@ -28,6 +33,8 @@ const formatarQuantidade = (quantidade: number) =>
 
 export default function OnMarketScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const telaCompacta = width <= 360;
   const { carregandoDados, onMarketItems, concluirOnMarketItem } = useBudget();
   const [categoriaAtiva, setCategoriaAtiva] =
     useState<(typeof FILTROS_CATEGORIA)[number]>("Todas");
@@ -66,21 +73,27 @@ export default function OnMarketScreen() {
 
   if (carregandoDados) {
     return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
-        <View style={styles.loadingCard}>
+      <PremiumScreen scroll={false}>
+        <PremiumCard style={styles.loadingCard}>
           <Text style={styles.loadingText}>Carregando lista ativa...</Text>
-        </View>
-      </LinearGradient>
+        </PremiumCard>
+      </PremiumScreen>
     );
   }
 
   return (
-    <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonText}>Voltar</Text>
-          </TouchableOpacity>
+    <PremiumScreen scroll={false}>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}>
+        <PremiumCard style={styles.card}>
+          <View style={styles.topBar}>
+            <PremiumButton secondary label="Voltar" onPress={() => router.back()} style={styles.backButton} />
+            <View style={styles.topBadge}>
+              <MaterialIcons name="shopping-cart" size={20} color={premiumColors.primary} />
+            </View>
+          </View>
 
           <Text style={styles.title}>On Market</Text>
           <Text style={styles.subtitle}>Lista de compras ativa</Text>
@@ -88,6 +101,7 @@ export default function OnMarketScreen() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            alwaysBounceHorizontal={false}
             contentContainerStyle={styles.filtersRow}>
             {FILTROS_CATEGORIA.map((categoria) => (
               <TouchableOpacity
@@ -97,7 +111,17 @@ export default function OnMarketScreen() {
                   categoriaAtiva === categoria && styles.filterChipActive,
                 ]}
                 onPress={() => setCategoriaAtiva(categoria)}>
+                <MaterialIcons
+                  name="sell"
+                  size={14}
+                  color={
+                    categoriaAtiva === categoria
+                      ? premiumColors.surface
+                      : premiumColors.textSecondary
+                  }
+                />
                 <Text
+                  numberOfLines={1}
                   style={[
                     styles.filterChipText,
                     categoriaAtiva === categoria && styles.filterChipTextActive,
@@ -125,13 +149,15 @@ export default function OnMarketScreen() {
                     <TouchableOpacity
                       style={[styles.checkbox, aberto && styles.checkboxActive]}
                       onPress={() => toggleItem(item)}>
-                      {aberto ? <Text style={styles.checkboxIcon}>✓</Text> : null}
+                      {aberto ? (
+                        <MaterialIcons name="check" size={14} color={premiumColors.surface} />
+                      ) : null}
                     </TouchableOpacity>
 
                     <View style={styles.itemMain}>
                       <Text style={styles.itemName}>{item.nome}</Text>
                       <Text style={styles.itemMeta}>
-                        {formatarQuantidade(item.quantidade)} • {item.categoria}
+                        {formatarQuantidade(item.quantidade)} - {item.categoria}
                       </Text>
                     </View>
 
@@ -143,7 +169,7 @@ export default function OnMarketScreen() {
                   {aberto ? (
                     <View style={styles.priceBox}>
                       <Text style={styles.priceLabel}>Valor unitario</Text>
-                      <View style={styles.priceRow}>
+                      <View style={[styles.priceRow, telaCompacta && styles.priceRowCompact]}>
                         <TextInput
                           value={valoresUnitarios[item.id] ?? ""}
                           onChangeText={(texto) =>
@@ -155,13 +181,13 @@ export default function OnMarketScreen() {
                           style={styles.priceInput}
                           keyboardType="decimal-pad"
                           placeholder="Ex.: 12,50"
-                          placeholderTextColor="#90a096"
+                          placeholderTextColor="#90A096"
                         />
-                        <TouchableOpacity
-                          style={styles.confirmButton}
-                          onPress={() => confirmarValor(item)}>
-                          <Text style={styles.confirmButtonText}>Confirmar</Text>
-                        </TouchableOpacity>
+                        <PremiumButton
+                          label="Confirmar"
+                          onPress={() => confirmarValor(item)}
+                          style={[styles.confirmButton, telaCompacta && styles.confirmButtonCompact]}
+                        />
                       </View>
                     </View>
                   ) : null}
@@ -169,93 +195,82 @@ export default function OnMarketScreen() {
               );
             })
           )}
-        </View>
+        </PremiumCard>
       </ScrollView>
-    </LinearGradient>
+    </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   content: {
     flexGrow: 1,
-    padding: 20,
-    justifyContent: "center",
+    paddingBottom: premiumSpacing.lg + 24,
   },
   card: {
-    backgroundColor: "#e9eceb",
-    borderRadius: 30,
-    padding: 22,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    gap: premiumSpacing.sm,
+  },
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   backButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "#d7dfda",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 18,
+    minWidth: 108,
   },
-  backButtonText: {
-    color: "#3f5d4d",
-    fontWeight: "700",
+  topBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: premiumColors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
   },
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    textAlign: "center",
-    color: "#2f5d45",
+    fontSize: 30,
+    fontWeight: "800",
+    color: premiumColors.text,
   },
   subtitle: {
-    textAlign: "center",
-    color: "#66766d",
-    marginTop: 6,
-    marginBottom: 20,
+    color: premiumColors.textSecondary,
+    marginTop: -10,
   },
   filtersRow: {
     flexDirection: "row",
     gap: 10,
     paddingRight: 10,
-    marginBottom: 18,
+    paddingVertical: 4,
   },
   filterChip: {
-    backgroundColor: "#d3dcd7",
-    borderRadius: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: premiumColors.surface,
+    borderRadius: premiumRadius.pill,
     paddingHorizontal: 14,
     paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: premiumColors.border,
+    boxShadow: premiumShadows.soft,
+    flexShrink: 0,
   },
   filterChipActive: {
-    backgroundColor: "#2f5d45",
+    backgroundColor: premiumColors.primary,
+    borderColor: premiumColors.primary,
   },
   filterChipText: {
-    color: "#42524a",
+    color: premiumColors.text,
     fontWeight: "600",
   },
   filterChipTextActive: {
-    color: "#fff",
+    color: premiumColors.surface,
   },
   itemCard: {
-    backgroundColor: "#fff",
-    borderRadius: 18,
+    backgroundColor: premiumColors.surface,
+    borderRadius: premiumRadius.lg,
     padding: 14,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: premiumColors.border,
+    boxShadow: premiumShadows.card,
   },
   itemHeader: {
     flexDirection: "row",
@@ -267,19 +282,14 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 7,
     borderWidth: 2,
-    borderColor: "#9aaca1",
+    borderColor: premiumColors.border,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fff",
+    backgroundColor: premiumColors.surface,
   },
   checkboxActive: {
-    backgroundColor: "#2f5d45",
-    borderColor: "#2f5d45",
-  },
-  checkboxIcon: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 13,
+    backgroundColor: premiumColors.primary,
+    borderColor: premiumColors.primary,
   },
   itemMain: {
     flex: 1,
@@ -287,10 +297,10 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#34443c",
+    color: premiumColors.text,
   },
   itemMeta: {
-    color: "#6c7a73",
+    color: premiumColors.textSecondary,
     marginTop: 4,
     fontSize: 12,
   },
@@ -309,10 +319,10 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: "#e1e8e3",
+    borderTopColor: premiumColors.border,
   },
   priceLabel: {
-    color: "#486756",
+    color: premiumColors.textSecondary,
     fontWeight: "700",
     marginBottom: 8,
   },
@@ -321,50 +331,53 @@ const styles = StyleSheet.create({
     gap: 10,
     alignItems: "center",
   },
+  priceRowCompact: {
+    flexDirection: "column",
+    alignItems: "stretch",
+  },
   priceInput: {
     flex: 1,
-    backgroundColor: "#f7faf8",
-    borderRadius: 14,
+    minWidth: 0,
+    minHeight: 56,
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumRadius.sm,
     paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingVertical: 0,
     fontSize: 16,
-    color: "#2f5d45",
+    color: premiumColors.text,
+    borderWidth: 1,
+    borderColor: premiumColors.border,
+    fontVariant: ["tabular-nums"],
   },
   confirmButton: {
-    backgroundColor: "#2f5d45",
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
+    width: 128,
   },
-  confirmButtonText: {
-    color: "#fff",
-    fontWeight: "700",
+  confirmButtonCompact: {
+    width: "100%",
   },
   emptyState: {
     paddingVertical: 40,
     alignItems: "center",
   },
   emptyTitle: {
-    color: "#2f5d45",
+    color: premiumColors.text,
     fontSize: 18,
     fontWeight: "700",
     marginBottom: 8,
   },
   emptyText: {
-    color: "#718078",
+    color: premiumColors.textSecondary,
     textAlign: "center",
     lineHeight: 20,
   },
   loadingCard: {
     flex: 1,
-    margin: 20,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#e9eceb",
-    borderRadius: 24,
+    minHeight: 180,
   },
   loadingText: {
-    color: "#2f5d45",
+    color: premiumColors.text,
     fontSize: 16,
     fontWeight: "600",
   },

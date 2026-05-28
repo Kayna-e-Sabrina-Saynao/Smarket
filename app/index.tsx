@@ -1,4 +1,6 @@
 import { useRouter } from "expo-router";
+import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
@@ -6,9 +8,14 @@ import {
   signInWithEmailAndPassword,
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  Animated,
   Alert,
+  Easing,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -84,6 +91,12 @@ export default function Login() {
   const [carregando, setCarregando] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false);
+  const [emailFocado, setEmailFocado] = useState(false);
+  const [senhaFocada, setSenhaFocada] = useState(false);
+  const [confirmacaoFocada, setConfirmacaoFocada] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const translateAnim = useRef(new Animated.Value(18)).current;
+  const buttonScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (usuario) => {
@@ -94,6 +107,23 @@ export default function Login() {
 
     return unsubscribe;
   }, [router]);
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 320,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateAnim, {
+        toValue: 0,
+        duration: 320,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, translateAnim]);
 
   const handleLogin = async () => {
     if (!email || !senha) {
@@ -209,100 +239,200 @@ export default function Login() {
     }
   };
 
+  const animarBotao = (para: number) => {
+    Animated.spring(buttonScale, {
+      toValue: para,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 140,
+    }).start();
+  };
+
   return (
     <View style={styles.container}>
-      {/* A mesma tela alterna entre login e registro para simplificar a entrada no app. */}
-      <Text style={styles.title}>Smarket</Text>
-      <Text style={styles.subtitle}>
-        {modo === "login" ? "Entre na sua conta" : "Crie sua conta"}
-      </Text>
+      <View style={styles.backgroundOrbTop} />
+      <View style={styles.backgroundOrbBottom} />
+      <View style={styles.backgroundLineOne} />
+      <View style={styles.backgroundLineTwo} />
 
-      <View style={styles.switchRow}>
-        <TouchableOpacity
-          style={[styles.switchButton, modo === "login" && styles.switchButtonActive]}
-          onPress={() => setModo("login")}>
-          <Text
-            style={[styles.switchText, modo === "login" && styles.switchTextActive]}>
-            Login
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.switchButton, modo === "registro" && styles.switchButtonActive]}
-          onPress={() => setModo("registro")}>
-          <Text
-            style={[styles.switchText, modo === "registro" && styles.switchTextActive]}>
-            Registro
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <TextInput
-        placeholder="Email"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        style={styles.input}
-        value={email}
-        onChangeText={setEmail}
-      />
-
-      <View style={styles.passwordWrapper}>
-        <TextInput
-          placeholder="Senha"
-          secureTextEntry={!mostrarSenha}
-          style={styles.passwordInput}
-          value={senha}
-          onChangeText={setSenha}
-        />
-        <TouchableOpacity
-          style={styles.passwordToggle}
-          onPress={() => setMostrarSenha((estadoAtual) => !estadoAtual)}>
-          <Text style={styles.passwordToggleText}>
-            {mostrarSenha ? "Ocultar" : "Mostrar"}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {modo === "registro" ? (
-        <View style={styles.passwordWrapper}>
-          <TextInput
-            placeholder="Confirmar senha"
-            secureTextEntry={!mostrarConfirmacao}
-            style={styles.passwordInput}
-            value={confirmarSenha}
-            onChangeText={setConfirmarSenha}
-          />
-          <TouchableOpacity
-            style={styles.passwordToggle}
-            onPress={() => setMostrarConfirmacao((estadoAtual) => !estadoAtual)}>
-            <Text style={styles.passwordToggleText}>
-              {mostrarConfirmacao ? "Ocultar" : "Mostrar"}
+      <ScrollView
+        bounces={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
+        <Animated.View
+          style={[
+            styles.contentWrapper,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: translateAnim }],
+            },
+          ]}>
+          <View style={styles.logoWrap}>
+            <Image
+              source={require("../assets/images/smarket-logo.png")}
+              style={styles.logo}
+              contentFit="contain"
+            />
+            <Text style={styles.subtitle}>
+              {modo === "login" ? "Entre na sua conta" : "Crie sua conta"}
             </Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
+          </View>
 
-      {modo === "login" ? (
-        <TouchableOpacity
-          style={styles.resetPasswordButton}
-          onPress={handleEsqueciSenha}
-          disabled={carregando}>
-          <Text style={styles.resetPasswordText}>Esqueceu a senha?</Text>
-        </TouchableOpacity>
-      ) : null}
+          <View style={styles.card}>
+            <View style={styles.switchRow}>
+              <TouchableOpacity
+                style={[styles.switchButton, modo === "login" && styles.switchButtonActive]}
+                onPress={() => setModo("login")}>
+                {modo === "login" ? (
+                  <LinearGradient
+                    colors={["#22C55E", "#4ADE80"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.switchGradient}
+                  />
+                ) : null}
+                <View style={styles.switchContent}>
+                  <MaterialIcons
+                    name="person-outline"
+                    size={18}
+                    color={modo === "login" ? "#FFFFFF" : "#6B7280"}
+                  />
+                  <Text style={[styles.switchText, modo === "login" && styles.switchTextActive]}>
+                    Login
+                  </Text>
+                </View>
+              </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={modo === "login" ? handleLogin : handleRegistro}
-        disabled={carregando}>
-        <Text style={styles.buttonText}>
-          {carregando
-            ? "Carregando..."
-            : modo === "login"
-              ? "Entrar"
-              : "Criar conta"}
-        </Text>
-      </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.switchButton, modo === "registro" && styles.switchButtonActive]}
+                onPress={() => setModo("registro")}>
+                {modo === "registro" ? (
+                  <LinearGradient
+                    colors={["#22C55E", "#4ADE80"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.switchGradient}
+                  />
+                ) : null}
+                <View style={styles.switchContent}>
+                  <MaterialIcons
+                    name="person-add-alt-1"
+                    size={18}
+                    color={modo === "registro" ? "#FFFFFF" : "#6B7280"}
+                  />
+                  <Text
+                    style={[styles.switchText, modo === "registro" && styles.switchTextActive]}>
+                    Registro
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.inputWrapper, emailFocado && styles.inputWrapperFocused]}>
+              <MaterialIcons name="mail-outline" size={20} color="#6B7280" />
+              <TextInput
+                placeholder="Seu melhor email"
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                onFocus={() => setEmailFocado(true)}
+                onBlur={() => setEmailFocado(false)}
+              />
+            </View>
+
+            <View style={[styles.inputWrapper, senhaFocada && styles.inputWrapperFocused]}>
+              <MaterialIcons name="lock-outline" size={20} color="#6B7280" />
+              <TextInput
+                placeholder="Sua senha"
+                placeholderTextColor="#9CA3AF"
+                secureTextEntry={!mostrarSenha}
+                style={styles.input}
+                value={senha}
+                onChangeText={setSenha}
+                onFocus={() => setSenhaFocada(true)}
+                onBlur={() => setSenhaFocada(false)}
+              />
+              <TouchableOpacity
+                style={styles.passwordToggle}
+                onPress={() => setMostrarSenha((estadoAtual) => !estadoAtual)}>
+                <MaterialIcons
+                  name={mostrarSenha ? "visibility-off" : "visibility"}
+                  size={20}
+                  color="#6B7280"
+                />
+              </TouchableOpacity>
+            </View>
+
+            {modo === "registro" ? (
+              <View
+                style={[styles.inputWrapper, confirmacaoFocada && styles.inputWrapperFocused]}>
+                <MaterialIcons name="lock-outline" size={20} color="#6B7280" />
+                <TextInput
+                  placeholder="Confirme sua senha"
+                  placeholderTextColor="#9CA3AF"
+                  secureTextEntry={!mostrarConfirmacao}
+                  style={styles.input}
+                  value={confirmarSenha}
+                  onChangeText={setConfirmarSenha}
+                  onFocus={() => setConfirmacaoFocada(true)}
+                  onBlur={() => setConfirmacaoFocada(false)}
+                />
+                <TouchableOpacity
+                  style={styles.passwordToggle}
+                  onPress={() => setMostrarConfirmacao((estadoAtual) => !estadoAtual)}>
+                  <MaterialIcons
+                    name={mostrarConfirmacao ? "visibility-off" : "visibility"}
+                    size={20}
+                    color="#6B7280"
+                  />
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
+            {modo === "login" ? (
+              <TouchableOpacity
+                style={styles.resetPasswordButton}
+                onPress={handleEsqueciSenha}
+                disabled={carregando}>
+                <Text style={styles.resetPasswordText}>Esqueceu a senha?</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
+              <Pressable
+                style={styles.buttonPressable}
+                onPress={modo === "login" ? handleLogin : handleRegistro}
+                onPressIn={() => animarBotao(1.015)}
+                onPressOut={() => animarBotao(1)}
+                disabled={carregando}>
+                <LinearGradient
+                  colors={["#22C55E", "#4ADE80"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.button}>
+                  <Text style={styles.buttonText}>
+                    {carregando
+                      ? "Carregando..."
+                      : modo === "login"
+                        ? "Entrar"
+                        : "Criar conta"}
+                  </Text>
+                  <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
+                </LinearGradient>
+              </Pressable>
+            </Animated.View>
+          </View>
+
+          <View style={styles.footer}>
+            <MaterialIcons name="shield" size={16} color="rgba(17, 24, 39, 0.45)" />
+            <Text style={styles.footerText}>Seus dados protegidos</Text>
+          </View>
+        </Animated.View>
+      </ScrollView>
     </View>
   );
 }
@@ -310,89 +440,203 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    padding: 20,
-    backgroundColor: "#f3f5f4",
+    backgroundColor: "#FFFFFF",
   },
-  title: {
-    fontSize: 28,
-    textAlign: "center",
-    marginBottom: 8,
-    color: "#2f5d45",
-    fontWeight: "700",
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 36,
+  },
+  contentWrapper: {
+    width: "100%",
+    alignSelf: "center",
+  },
+  backgroundOrbTop: {
+    position: "absolute",
+    top: -70,
+    right: -40,
+    width: 210,
+    height: 210,
+    borderRadius: 105,
+    backgroundColor: "rgba(74, 222, 128, 0.18)",
+  },
+  backgroundOrbBottom: {
+    position: "absolute",
+    bottom: -100,
+    left: -30,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: "rgba(34, 197, 94, 0.10)",
+  },
+  backgroundLineOne: {
+    position: "absolute",
+    bottom: 170,
+    right: -20,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    borderWidth: 1,
+    borderColor: "rgba(34, 197, 94, 0.08)",
+  },
+  backgroundLineTwo: {
+    position: "absolute",
+    bottom: 110,
+    right: 20,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    borderWidth: 1,
+    borderColor: "rgba(17, 24, 39, 0.04)",
+  },
+  logoWrap: {
+    alignItems: "center",
+    marginBottom: -52,
+  },
+  logo: {
+    width: 360,
+    height: 360,
+    marginBottom: -90,
   },
   subtitle: {
     textAlign: "center",
-    color: "#5f6f66",
-    marginBottom: 20,
+    color: "#6B7280",
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 0,
+  },
+  card: {
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderRadius: 30,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+    shadowColor: "#111827",
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.08,
+    shadowRadius: 28,
+    elevation: 8,
   },
   switchRow: {
     flexDirection: "row",
-    backgroundColor: "#dfe7e2",
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 16,
+    backgroundColor: "#F5F7FA",
+    borderRadius: 22,
+    padding: 6,
+    marginBottom: 18,
   },
   switchButton: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
+    minHeight: 52,
+    borderRadius: 18,
     alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    position: "relative",
   },
   switchButtonActive: {
-    backgroundColor: "#3a7156",
+    shadowColor: "#22C55E",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 3,
   },
-  switchText: {
-    color: "#476355",
-    fontWeight: "600",
+  switchGradient: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 18,
   },
-  switchTextActive: {
-    color: "#fff",
-  },
-  input: {
-    backgroundColor: "#eee",
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  passwordWrapper: {
+  switchContent: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#eee",
-    borderRadius: 10,
-    marginBottom: 10,
-    overflow: "hidden",
+    gap: 8,
   },
-  passwordInput: {
+  switchText: {
+    color: "#6B7280",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  switchTextActive: {
+    color: "#FFFFFF",
+  },
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    minHeight: 58,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    shadowColor: "#111827",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 16,
+    elevation: 2,
+    marginBottom: 12,
+  },
+  inputWrapperFocused: {
+    borderColor: "#22C55E",
+    shadowColor: "#22C55E",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 4,
+  },
+  input: {
     flex: 1,
-    padding: 15,
+    paddingVertical: 17,
+    paddingHorizontal: 12,
+    color: "#111827",
+    fontSize: 15,
   },
   passwordToggle: {
-    paddingHorizontal: 14,
-    paddingVertical: 15,
-    backgroundColor: "#dfe7e2",
-  },
-  passwordToggleText: {
-    color: "#3a7156",
-    fontWeight: "700",
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8FAFC",
   },
   resetPasswordButton: {
     alignSelf: "flex-end",
-    marginBottom: 12,
+    marginTop: 2,
+    marginBottom: 14,
   },
   resetPasswordText: {
-    color: "#3a7156",
+    color: "#22C55E",
     fontWeight: "600",
+    fontSize: 13,
+  },
+  buttonPressable: {
+    borderRadius: 20,
   },
   button: {
-    backgroundColor: "#3a7156",
-    padding: 15,
-    borderRadius: 10,
+    minHeight: 60,
+    borderRadius: 20,
     alignItems: "center",
-    marginTop: 4,
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 10,
+    shadowColor: "#22C55E",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.24,
+    shadowRadius: 20,
+    elevation: 7,
   },
   buttonText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontWeight: "700",
+    fontSize: 16,
+  },
+  footer: {
+    marginTop: 18,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  footerText: {
+    color: "rgba(17, 24, 39, 0.45)",
+    fontSize: 12,
+    fontWeight: "600",
   },
 });

@@ -1,6 +1,10 @@
 import { LinearGradient } from "expo-linear-gradient";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+
+import { PremiumButton } from "@/src/components/premium/PremiumButton";
+import { premiumColors, premiumRadius, premiumShadows } from "@/src/theme/premium-ui";
 
 type PlanCardProps = {
   name: string;
@@ -45,7 +49,11 @@ export function PlanCard({
       <View style={styles.featuresList}>
         {features.map((feature) => (
           <View key={feature} style={styles.featureRow}>
-            <View style={[styles.featureDot, highlighted && styles.featureDotHighlighted]} />
+            <MaterialIcons
+              name="check-circle"
+              size={18}
+              color={highlighted ? premiumColors.primary : "#86A68F"}
+            />
             <Text style={[styles.featureText, highlighted && styles.featureTextHighlighted]}>
               {feature}
             </Text>
@@ -53,13 +61,13 @@ export function PlanCard({
         ))}
       </View>
 
-      <TouchableOpacity
-        style={[styles.button, highlighted && styles.buttonHighlighted, current && styles.buttonCurrent]}
-        onPress={onPress}>
-        <Text style={[styles.buttonText, highlighted && styles.buttonTextHighlighted]}>
-          {current ? "Plano atual" : buttonText}
-        </Text>
-      </TouchableOpacity>
+      <PremiumButton
+        label={current ? "Plano atual" : buttonText}
+        onPress={onPress}
+        secondary={!highlighted}
+        disabled={current}
+        style={[styles.button, current && styles.buttonCurrent]}
+      />
     </View>
   );
 
@@ -76,21 +84,22 @@ export function PlanCard({
 
 const styles = StyleSheet.create({
   highlightWrap: {
-    borderRadius: 28,
+    borderRadius: premiumRadius.xl,
     padding: 1.5,
     marginBottom: 16,
   },
   card: {
-    backgroundColor: "#eef3f0",
-    borderRadius: 26,
+    backgroundColor: premiumColors.surface,
+    borderRadius: premiumRadius.xl,
     padding: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#dce7e0",
+    borderColor: premiumColors.border,
+    boxShadow: premiumShadows.card,
   },
   cardHighlighted: {
-    backgroundColor: "#f7fcf8",
-    borderColor: "#b9d9c0",
+    backgroundColor: "#F9FFFB",
+    borderColor: "#BBF7D0",
   },
   headerRow: {
     flexDirection: "row",
@@ -99,24 +108,24 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   name: {
-    color: "#173428",
+    color: premiumColors.text,
     fontSize: 24,
     fontWeight: "800",
   },
   nameHighlighted: {
-    color: "#1f4b34",
+    color: premiumColors.text,
   },
   price: {
-    color: "#2f5d45",
+    color: premiumColors.primary,
     fontSize: 18,
     fontWeight: "700",
     marginTop: 6,
   },
   priceHighlighted: {
-    color: "#25543b",
+    color: premiumColors.primary,
   },
   recommendedBadge: {
-    backgroundColor: "#2f5d45",
+    backgroundColor: premiumColors.text,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 7,
@@ -127,13 +136,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   description: {
-    color: "#62746a",
+    color: premiumColors.textSecondary,
     lineHeight: 21,
     marginTop: 14,
     marginBottom: 16,
   },
   descriptionHighlighted: {
-    color: "#4d6658",
+    color: premiumColors.textSecondary,
   },
   featuresList: {
     gap: 10,
@@ -143,43 +152,18 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 10,
   },
-  featureDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#89b298",
-    marginTop: 6,
-  },
-  featureDotHighlighted: {
-    backgroundColor: "#2f5d45",
-  },
   featureText: {
-    color: "#415148",
+    color: premiumColors.text,
     flex: 1,
     lineHeight: 20,
   },
   featureTextHighlighted: {
-    color: "#30453b",
+    color: premiumColors.text,
   },
   button: {
-    backgroundColor: "#dce7e0",
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: "center",
     marginTop: 20,
-  },
-  buttonHighlighted: {
-    backgroundColor: "#2f5d45",
   },
   buttonCurrent: {
     opacity: 0.88,
-  },
-  buttonText: {
-    color: "#2f5d45",
-    fontWeight: "800",
-    fontSize: 15,
-  },
-  buttonTextHighlighted: {
-    color: "#fff",
   },
 });

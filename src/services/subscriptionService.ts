@@ -85,6 +85,10 @@ export const normalizeUserSubscription = (
         ? data.inviteCode
         : createInviteCode(uid),
     notificationsEnabled: data?.notificationsEnabled === true,
+    selectedCycleMonth:
+      typeof data?.selectedCycleMonth === "number" ? data.selectedCycleMonth : null,
+    selectedCycleYear:
+      typeof data?.selectedCycleYear === "number" ? data.selectedCycleYear : null,
     createdAt: toDate(data?.createdAt),
     updatedAt: toDate(data?.updatedAt),
   };
@@ -110,6 +114,8 @@ export const ensureUserSubscriptionProfile = async ({
         hasCompletedOnboarding: false,
         inviteCode: createInviteCode(uid),
         notificationsEnabled: false,
+        selectedCycleMonth: new Date().getMonth(),
+        selectedCycleYear: new Date().getFullYear(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       },
@@ -133,6 +139,14 @@ export const ensureUserSubscriptionProfile = async ({
           ? existingData.inviteCode
           : createInviteCode(uid),
       notificationsEnabled: existingData.notificationsEnabled === true,
+      selectedCycleMonth:
+        typeof existingData.selectedCycleMonth === "number"
+          ? existingData.selectedCycleMonth
+          : new Date().getMonth(),
+      selectedCycleYear:
+        typeof existingData.selectedCycleYear === "number"
+          ? existingData.selectedCycleYear
+          : new Date().getFullYear(),
       updatedAt: serverTimestamp(),
     },
     { merge: true }
@@ -206,6 +220,8 @@ export const updateUserAppPreferences = async (
     notificationsEnabled?: boolean;
     familyMembers?: string[];
     inviteCode?: string | null;
+    selectedCycleMonth?: number;
+    selectedCycleYear?: number;
   }
 ) => {
   await setDoc(

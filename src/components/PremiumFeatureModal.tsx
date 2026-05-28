@@ -1,11 +1,8 @@
 import React from "react";
-import {
-  Modal,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Modal, StyleSheet, Text, View } from "react-native";
+
+import { PremiumButton } from "@/src/components/premium/PremiumButton";
+import { premiumColors, premiumRadius, premiumShadows } from "@/src/theme/premium-ui";
 
 type PremiumFeatureModalProps = {
   visible: boolean;
@@ -33,13 +30,8 @@ export function PremiumFeatureModal({
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.description}>{description}</Text>
 
-          <TouchableOpacity style={styles.primaryButton} onPress={onViewPlans}>
-            <Text style={styles.primaryButtonText}>Ver planos</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.secondaryButton} onPress={onClose}>
-            <Text style={styles.secondaryButtonText}>Agora nao</Text>
-          </TouchableOpacity>
+          <PremiumButton label="Ver planos" onPress={onViewPlans} style={styles.primaryButton} />
+          <PremiumButton secondary label="Agora nao" onPress={onClose} style={styles.secondaryButton} />
         </View>
       </View>
     </Modal>
@@ -49,70 +41,47 @@ export function PremiumFeatureModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(8, 22, 16, 0.5)",
+    backgroundColor: "rgba(17,24,39,0.48)",
     justifyContent: "center",
     padding: 20,
   },
   card: {
-    backgroundColor: "#eef3f0",
-    borderRadius: 28,
+    backgroundColor: premiumColors.surface,
+    borderRadius: premiumRadius.xl,
     padding: 24,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 10,
-    },
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-    elevation: 8,
+    borderWidth: 1,
+    borderColor: premiumColors.border,
+    boxShadow: premiumShadows.card,
   },
   badge: {
     alignSelf: "flex-start",
-    backgroundColor: "#d7f0dc",
+    backgroundColor: premiumColors.successSoft,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
     marginBottom: 14,
   },
   badgeText: {
-    color: "#2f5d45",
+    color: premiumColors.primary,
     fontWeight: "800",
     fontSize: 12,
     letterSpacing: 0.6,
   },
   title: {
-    color: "#173428",
+    color: premiumColors.text,
     fontSize: 24,
     fontWeight: "800",
     marginBottom: 8,
   },
   description: {
-    color: "#5d6f65",
+    color: premiumColors.textSecondary,
     fontSize: 15,
     lineHeight: 22,
     marginBottom: 22,
   },
   primaryButton: {
-    backgroundColor: "#2f5d45",
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: "center",
     marginBottom: 10,
   },
-  primaryButtonText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 15,
-  },
   secondaryButton: {
-    backgroundColor: "#d7dfda",
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  secondaryButtonText: {
-    color: "#3f5d4d",
-    fontWeight: "700",
-    fontSize: 15,
   },
 });
