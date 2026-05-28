@@ -1,11 +1,15 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useMemo } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { useBudget } from "@/context/budget-context";
 import { AppSkeleton } from "@/src/components/AppSkeleton";
+import { PremiumButton } from "@/src/components/premium/PremiumButton";
+import { PremiumCard } from "@/src/components/premium/PremiumCard";
+import { PremiumScreen } from "@/src/components/premium/PremiumScreen";
+import { useCycle } from "@/src/context/CycleContext";
+import { premiumColors, premiumRadius, premiumShadows, premiumSpacing } from "@/src/theme/premium-ui";
 
 const formatarMoeda = (valor: number) =>
   valor.toLocaleString("pt-BR", {
@@ -15,81 +19,90 @@ const formatarMoeda = (valor: number) =>
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const { carregandoDados, historicoCompras, items, orcamentoRestante, valorGasto } = useBudget();
+  const { carregandoDados, historicoCompras, items, orcamentoRestante } = useBudget();
+  const { currentMonth, currentYear, cycleLoading, cycleUpdating, getCurrentCycle } = useCycle();
 
-  const comprasDoMes = useMemo(() => {
-    const agora = new Date();
-    const anoAtual = agora.getFullYear();
-    const mesAtual = agora.getMonth() + 1;
+  const comprasDoMes = useMemo(
+    () =>
+      historicoCompras.filter((compra) => {
+        const [ano, mes] = compra.data.split("-").map(Number);
+        return ano === currentYear && mes === currentMonth + 1;
+      }),
+    [currentMonth, currentYear, historicoCompras]
+  );
 
-    return historicoCompras.filter((compra) => {
-      const [ano, mes] = compra.data.split("-").map(Number);
-      return ano === anoAtual && mes === mesAtual;
-    });
-  }, [historicoCompras]);
+  const gastoNoPeriodo = useMemo(
+    () => comprasDoMes.reduce((total, compra) => total + compra.totalGasto, 0),
+    [comprasDoMes]
+  );
 
   const economia = Math.max(orcamentoRestante, 0);
 
   return (
-    <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <View style={styles.headerRow}>
-            <View>
-              <Text style={styles.title}>Dashboard</Text>
-              <Text style={styles.subtitle}>Seu resumo rapido do mes</Text>
-            </View>
-
-            <View style={styles.iconCircle}>
-              <MaterialIcons name="dashboard" size={24} color="#2f5d45" />
-            </View>
+    <PremiumScreen>
+      <PremiumCard style={styles.card}>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.title}>Dashboard</Text>
+            <Text style={styles.subtitle}>{getCurrentCycle().fullLabel}</Text>
           </View>
 
-          <View style={styles.statsGrid}>
-            <SummaryCard
-              icon="payments"
-              label="Gastou este mes"
-              value={carregandoDados ? null : formatarMoeda(valorGasto)}
-              highlight
-            />
-            <SummaryCard
-              icon="savings"
-              label="Economia"
-              value={carregandoDados ? null : formatarMoeda(economia)}
-            />
-            <SummaryCard
-              icon="shopping-bag"
-              label="Compras realizadas"
-              value={carregandoDados ? null : String(comprasDoMes.length)}
-            />
-            <SummaryCard
-              icon="playlist-add-check-circle"
-              label="Itens ativos"
-              value={carregandoDados ? null : String(items.length)}
-            />
-          </View>
-
-          <View style={styles.tipCard}>
-            <Text style={styles.tipTitle}>Leitura do momento</Text>
-            <Text style={styles.tipText}>
-              {valorGasto > 0
-                ? `Voce ja movimentou ${formatarMoeda(valorGasto)} neste mes. Continue registrando suas compras para manter tudo organizado.`
-                : "Assim que voce finalizar compras, este painel mostra o resumo do seu mes."}
-            </Text>
-          </View>
-
-          <View style={styles.actionsRow}>
-            <TouchableOpacity style={styles.primaryAction} onPress={() => router.push("/(tabs)/gastos")}>
-              <Text style={styles.primaryActionText}>Ver gastos</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.secondaryAction} onPress={() => router.push("/(tabs)/home")}>
-              <Text style={styles.secondaryActionText}>Abrir orcamento</Text>
-            </TouchableOpacity>
+          <View style={styles.iconCircle}>
+            <MaterialIcons name="dashboard" size={24} color={premiumColors.primary} />
           </View>
         </View>
-      </ScrollView>
-    </LinearGradient>
+
+        {cycleUpdating ? (
+          <View style={styles.loadingCycleRow}>
+            <ActivityIndicator size="small" color={premiumColors.primary} />
+            <Text style={styles.loadingCycleText}>Atualizando dados do ciclo...</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.statsGrid}>
+          <SummaryCard
+            icon="payments"
+            label="Gastou no ciclo"
+            value={carregandoDados || cycleLoading ? null : formatarMoeda(gastoNoPeriodo)}
+            highlight
+          />
+          <SummaryCard
+            icon="savings"
+            label="Economia"
+            value={carregandoDados ? null : formatarMoeda(economia)}
+          />
+          <SummaryCard
+            icon="shopping-bag"
+            label="Compras realizadas"
+            value={carregandoDados || cycleLoading ? null : String(comprasDoMes.length)}
+          />
+          <SummaryCard
+            icon="playlist-add-check-circle"
+            label="Itens ativos"
+            value={carregandoDados || cycleLoading ? null : String(items.length)}
+          />
+        </View>
+
+        <View style={styles.tipCard}>
+          <Text style={styles.tipTitle}>Leitura do momento</Text>
+          <Text style={styles.tipText}>
+            {gastoNoPeriodo > 0
+              ? `Voce ja movimentou ${formatarMoeda(gastoNoPeriodo)} neste ciclo. Continue registrando suas compras para manter tudo organizado.`
+              : "Assim que voce finalizar compras, este painel mostra o resumo do seu ciclo."}
+          </Text>
+        </View>
+
+        <View style={styles.actionsRow}>
+          <PremiumButton label="Ver gastos" onPress={() => router.push("/(tabs)/gastos")} style={styles.action} />
+          <PremiumButton
+            secondary
+            label="Abrir orcamento"
+            onPress={() => router.push("/(tabs)/home")}
+            style={styles.action}
+          />
+        </View>
+      </PremiumCard>
+    </PremiumScreen>
   );
 }
 
@@ -107,7 +120,11 @@ function SummaryCard({
   return (
     <View style={[styles.summaryCard, highlight && styles.summaryCardHighlight]}>
       <View style={[styles.summaryIcon, highlight && styles.summaryIconHighlight]}>
-        <MaterialIcons name={icon} size={20} color={highlight ? "#fff" : "#2f5d45"} />
+        <MaterialIcons
+          name={icon}
+          size={20}
+          color={highlight ? premiumColors.surface : premiumColors.primary}
+        />
       </View>
       <Text style={styles.summaryLabel}>{label}</Text>
       {value === null ? (
@@ -120,45 +137,39 @@ function SummaryCard({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    flexGrow: 1,
-    padding: 20,
-  },
   card: {
-    backgroundColor: "#e9eceb",
-    borderRadius: 30,
-    padding: 22,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
-    elevation: 5,
+    gap: premiumSpacing.sm,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 22,
   },
   title: {
-    color: "#173428",
+    color: premiumColors.text,
     fontSize: 28,
     fontWeight: "800",
   },
   subtitle: {
-    color: "#607068",
+    color: premiumColors.textSecondary,
     marginTop: 4,
   },
   iconCircle: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#dce7e0",
+    backgroundColor: premiumColors.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
+  },
+  loadingCycleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  loadingCycleText: {
+    color: premiumColors.textSecondary,
+    fontSize: 13,
   },
   statsGrid: {
     flexDirection: "row",
@@ -168,77 +179,57 @@ const styles = StyleSheet.create({
   summaryCard: {
     width: "48%",
     minHeight: 146,
-    backgroundColor: "#f5f8f6",
-    borderRadius: 22,
+    backgroundColor: premiumColors.surface,
+    borderRadius: premiumRadius.lg,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#dce7e0",
+    borderColor: premiumColors.border,
+    boxShadow: premiumShadows.card,
   },
   summaryCardHighlight: {
-    backgroundColor: "#eef8f1",
+    backgroundColor: "#F0FDF4",
   },
   summaryIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#dce7e0",
+    backgroundColor: premiumColors.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
   },
   summaryIconHighlight: {
-    backgroundColor: "#2f5d45",
+    backgroundColor: premiumColors.primary,
   },
   summaryLabel: {
-    color: "#607068",
+    color: premiumColors.textSecondary,
     lineHeight: 18,
     marginBottom: 8,
   },
   summaryValue: {
-    color: "#173428",
+    color: premiumColors.text,
     fontWeight: "800",
     fontSize: 22,
   },
   tipCard: {
-    marginTop: 18,
-    borderRadius: 22,
-    backgroundColor: "#dce7e0",
+    borderRadius: premiumRadius.lg,
+    backgroundColor: premiumColors.surfaceMuted,
     padding: 16,
   },
   tipTitle: {
-    color: "#173428",
+    color: premiumColors.text,
     fontWeight: "800",
     marginBottom: 6,
   },
   tipText: {
-    color: "#5b6e64",
+    color: premiumColors.textSecondary,
     lineHeight: 21,
   },
   actionsRow: {
     flexDirection: "row",
     gap: 12,
-    marginTop: 20,
   },
-  primaryAction: {
+  action: {
     flex: 1,
-    backgroundColor: "#2f5d45",
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  primaryActionText: {
-    color: "#fff",
-    fontWeight: "800",
-  },
-  secondaryAction: {
-    flex: 1,
-    backgroundColor: "#dce7e0",
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  secondaryActionText: {
-    color: "#2f5d45",
-    fontWeight: "800",
   },
 });

@@ -1,23 +1,18 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Alert, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 
 import { PremiumFeatureModal } from "@/src/components/PremiumFeatureModal";
+import { PremiumButton } from "@/src/components/premium/PremiumButton";
+import { PremiumCard } from "@/src/components/premium/PremiumCard";
+import { PremiumScreen } from "@/src/components/premium/PremiumScreen";
 import { PLANS } from "@/src/config/plans";
 import { useSubscription } from "@/src/context/subscription-context";
 import { ensureUserInviteCode } from "@/src/services/subscriptionService";
+import { premiumColors, premiumSpacing } from "@/src/theme/premium-ui";
 import { canUseFamilyFeatures } from "@/src/utils/planPermissions";
 import { auth } from "../../firebaseConfig";
 
@@ -82,7 +77,7 @@ export default function ConvidarFamiliaScreen() {
 
   if (!familyEnabled) {
     return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+      <PremiumScreen scroll={false}>
         <PremiumFeatureModal
           visible={premiumModalVisible}
           onClose={() => {
@@ -94,160 +89,111 @@ export default function ConvidarFamiliaScreen() {
             router.replace("/(tabs)/planos");
           }}
         />
-      </LinearGradient>
+      </PremiumScreen>
     );
   }
 
   return (
-    <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+    <PremiumScreen scroll={false}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonText}>Voltar</Text>
-          </TouchableOpacity>
-
-          <View style={styles.headerRow}>
-            <View>
-              <Text style={styles.title}>Convidar membros</Text>
-              <Text style={styles.subtitle}>
-                Plano {PLANS[currentPlan].name} com espaco para ate 5 pessoas.
-              </Text>
-            </View>
-
-            <View style={styles.iconCircle}>
-              <MaterialIcons name="groups" size={24} color="#2f5d45" />
+        <PremiumCard style={styles.card}>
+          <View style={styles.topBar}>
+            <PremiumButton secondary label="Voltar" onPress={() => router.back()} style={styles.topButton} />
+            <View style={styles.titleBadge}>
+              <MaterialIcons name="groups" size={22} color={premiumColors.primary} />
             </View>
           </View>
 
-          <View style={styles.codeCard}>
+          <Text style={styles.title}>Convidar membros</Text>
+          <Text style={styles.subtitle}>
+            Plano {PLANS[currentPlan].name} com espaco para ate 5 pessoas.
+          </Text>
+
+          <PremiumCard style={styles.codeCard}>
             <Text style={styles.sectionLabel}>Codigo da familia</Text>
             <Text style={styles.codeValue}>{inviteCode ?? "Gerando..."}</Text>
             <Text style={styles.codeHelper}>
               Compartilhe o codigo ou o link para conectar novos membros.
             </Text>
-          </View>
+          </PremiumCard>
 
-          <View style={styles.qrCard}>
+          <PremiumCard style={styles.qrCard}>
             <Text style={styles.sectionLabel}>QR Code</Text>
             {inviteCode ? (
               <View style={styles.qrWrapper}>
                 <QRCode value={inviteLink} size={164} color="#173428" backgroundColor="#ffffff" />
               </View>
             ) : null}
-          </View>
+          </PremiumCard>
 
-          <TouchableOpacity style={styles.primaryButton} onPress={() => shareInvite("link")}>
-            <Text style={styles.primaryButtonText}>Compartilhar link</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.secondaryButton} onPress={() => shareInvite("code")}>
-            <Text style={styles.secondaryButtonText}>Compartilhar codigo</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.secondaryButton} onPress={() => shareInvite("qr")}>
-            <Text style={styles.secondaryButtonText}>Compartilhar QR Code</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.ghostButton} onPress={copyCode}>
-            <Text style={styles.ghostButtonText}>Ver codigo</Text>
-          </TouchableOpacity>
-        </View>
+          <PremiumButton label="Compartilhar link" onPress={() => shareInvite("link")} />
+          <PremiumButton secondary label="Compartilhar codigo" onPress={() => shareInvite("code")} />
+          <PremiumButton secondary label="Compartilhar QR Code" onPress={() => shareInvite("qr")} />
+          <PremiumButton secondary label="Ver codigo" onPress={copyCode} />
+        </PremiumCard>
       </ScrollView>
-    </LinearGradient>
+    </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { flexGrow: 1, padding: 20 },
+  content: {
+    paddingBottom: premiumSpacing.lg,
+  },
   card: {
-    backgroundColor: "#e9eceb",
-    borderRadius: 30,
-    padding: 22,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
-    elevation: 5,
+    gap: premiumSpacing.sm,
   },
-  backButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "#d7dfda",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 18,
-  },
-  backButtonText: { color: "#3f5d4d", fontWeight: "700" },
-  headerRow: {
+  topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 18,
+    alignItems: "center",
   },
-  title: { color: "#173428", fontSize: 28, fontWeight: "800" },
-  subtitle: { color: "#607068", marginTop: 6, lineHeight: 20 },
-  iconCircle: {
+  topButton: {
+    minWidth: 108,
+  },
+  titleBadge: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#dce7e0",
+    backgroundColor: premiumColors.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
   },
+  title: {
+    color: premiumColors.text,
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  subtitle: {
+    color: premiumColors.textSecondary,
+    marginTop: -10,
+    lineHeight: 20,
+  },
   codeCard: {
-    backgroundColor: "#f5f8f6",
-    borderRadius: 22,
-    padding: 18,
-    marginBottom: 14,
+    gap: 8,
+    backgroundColor: "#F0FDF4",
+    borderColor: "#BBF7D0",
   },
   sectionLabel: {
-    color: "#5c7065",
-    marginBottom: 8,
+    color: premiumColors.textSecondary,
     fontWeight: "700",
   },
   codeValue: {
-    color: "#173428",
+    color: premiumColors.text,
     fontSize: 24,
     fontWeight: "800",
   },
   codeHelper: {
-    color: "#61736a",
-    marginTop: 8,
+    color: premiumColors.textSecondary,
     lineHeight: 20,
   },
   qrCard: {
-    backgroundColor: "#dce7e0",
-    borderRadius: 22,
-    padding: 18,
-    marginBottom: 18,
     alignItems: "center",
+    gap: 12,
   },
   qrWrapper: {
-    marginTop: 10,
     padding: 16,
-    borderRadius: 22,
-    backgroundColor: "#fff",
+    borderRadius: 24,
+    backgroundColor: premiumColors.surface,
   },
-  primaryButton: {
-    backgroundColor: "#2f5d45",
-    borderRadius: 16,
-    paddingVertical: 15,
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  primaryButtonText: { color: "#fff", fontWeight: "800" },
-  secondaryButton: {
-    backgroundColor: "#dce7e0",
-    borderRadius: 16,
-    paddingVertical: 15,
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  secondaryButtonText: { color: "#2f5d45", fontWeight: "800" },
-  ghostButton: {
-    alignItems: "center",
-    paddingVertical: 14,
-  },
-  ghostButtonText: { color: "#607068", fontWeight: "700" },
 });

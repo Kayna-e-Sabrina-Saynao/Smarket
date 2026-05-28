@@ -1,34 +1,26 @@
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { Categoria, useBudget } from "@/context/budget-context";
 import { PremiumFeatureModal } from "@/src/components/PremiumFeatureModal";
+import { PremiumButton } from "@/src/components/premium/PremiumButton";
+import { PremiumCard } from "@/src/components/premium/PremiumCard";
+import { PremiumScreen } from "@/src/components/premium/PremiumScreen";
 import { useSubscription } from "@/src/context/subscription-context";
 import { trackEvent } from "@/src/services/analyticsService";
-import {
-  notifyListUpdated,
-  scheduleInactivityReminder,
-} from "@/src/services/notificationService";
+import { notifyListUpdated, scheduleInactivityReminder } from "@/src/services/notificationService";
+import { premiumColors, premiumRadius, premiumShadows, premiumSpacing } from "@/src/theme/premium-ui";
 import { canUseCustomization } from "@/src/utils/planPermissions";
 
 const CORES_PERSONALIZADAS = [
-  "#2f5d45",
-  "#f2c94c",
-  "#6c5ce7",
-  "#27ae60",
-  "#e17055",
-  "#ff8fab",
-  "#d4a373",
+  "#2F5D45",
+  "#F2C94C",
+  "#6C5CE7",
+  "#27AE60",
+  "#E17055",
+  "#FF8FAB",
+  "#D4A373",
   "#577590",
 ];
 
@@ -47,9 +39,7 @@ export default function AddItemScreen() {
   const [quantidade, setQuantidade] = useState("");
   const [usarCategoriaPersonalizada, setUsarCategoriaPersonalizada] = useState(false);
   const [nomeCategoriaPersonalizada, setNomeCategoriaPersonalizada] = useState("");
-  const [corCategoriaPersonalizada, setCorCategoriaPersonalizada] = useState(
-    CORES_PERSONALIZADAS[0]
-  );
+  const [corCategoriaPersonalizada, setCorCategoriaPersonalizada] = useState(CORES_PERSONALIZADAS[0]);
   const [mostrarGerenciarCategorias, setMostrarGerenciarCategorias] = useState(false);
   const [premiumModalVisible, setPremiumModalVisible] = useState(false);
   const customizationEnabled = canUseCustomization(currentPlan, isUltimate);
@@ -63,7 +53,6 @@ export default function AddItemScreen() {
     const quantidadeNumerica = Number(quantidade);
     let categoriaSelecionada = categoria;
 
-    // As validacoes aqui evitam gravar itens inconsistentes no estado global e no Firebase.
     if (!nome.trim()) {
       Alert.alert("Nome obrigatorio", "Informe o nome do item.");
       return;
@@ -118,7 +107,8 @@ export default function AddItemScreen() {
 
     router.back();
   };
-  const categoriasPersonalizadas = opcoesCategoria.filter((categoria) => categoria.personalizada);
+
+  const categoriasPersonalizadas = opcoesCategoria.filter((itemCategoria) => itemCategoria.personalizada);
 
   const apagarCategoria = (nomeCategoria: string) => {
     if (!customizationEnabled) {
@@ -142,18 +132,25 @@ export default function AddItemScreen() {
 
   if (carregandoDados) {
     return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
-        <View style={styles.loadingCard}>
+      <PremiumScreen scroll={false}>
+        <PremiumCard style={styles.loadingCard}>
           <Text style={styles.loadingText}>Preparando formulario...</Text>
-        </View>
-      </LinearGradient>
+        </PremiumCard>
+      </PremiumScreen>
     );
   }
 
   return (
-    <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.card}>
+    <PremiumScreen scroll={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <PremiumCard style={styles.card}>
+          <View style={styles.topBar}>
+            <PremiumButton secondary label="Voltar" onPress={() => router.back()} style={styles.topButton} />
+            <View style={styles.titleBadge}>
+              <Text style={styles.titleBadgeText}>+</Text>
+            </View>
+          </View>
+
           <Text style={styles.title}>Adicionar Item</Text>
           <Text style={styles.subtitle}>Preencha os dados do novo item</Text>
 
@@ -163,14 +160,11 @@ export default function AddItemScreen() {
             onChangeText={setNome}
             style={styles.input}
             placeholder="Ex.: Cafe"
-            placeholderTextColor="#90a096"
+            placeholderTextColor="#90A096"
           />
 
           <Text style={styles.label}>Categoria</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categories}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categories}>
             {opcoesCategoria.map((opcao) => (
               <TouchableOpacity
                 key={opcao.nome}
@@ -186,9 +180,7 @@ export default function AddItemScreen() {
                 <Text
                   style={[
                     styles.categoryText,
-                    categoria === opcao.nome &&
-                      !usarCategoriaPersonalizada &&
-                      styles.categoryTextActive,
+                    categoria === opcao.nome && !usarCategoriaPersonalizada && styles.categoryTextActive,
                   ]}>
                   {opcao.nome}
                 </Text>
@@ -230,14 +222,11 @@ export default function AddItemScreen() {
                 onChangeText={setNomeCategoriaPersonalizada}
                 style={styles.input}
                 placeholder="Nome da categoria"
-                placeholderTextColor="#90a096"
+                placeholderTextColor="#90A096"
               />
 
               <Text style={styles.rgbLabel}>Escolha uma cor</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.colorRow}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorRow}>
                 {CORES_PERSONALIZADAS.map((cor) => (
                   <TouchableOpacity
                     key={cor}
@@ -273,29 +262,28 @@ export default function AddItemScreen() {
               </TouchableOpacity>
 
               {mostrarGerenciarCategorias ? (
-                <View style={styles.deleteCategoriesCard}>
-                {categoriasPersonalizadas.map((categoriaPersonalizada) => (
-                  <View key={categoriaPersonalizada.nome} style={styles.deleteCategoryRow}>
-                    <View style={styles.deleteCategoryInfo}>
-                      <View
-                        style={[
-                          styles.deleteCategoryColor,
-                          { backgroundColor: categoriaPersonalizada.cor },
-                        ]}
-                      />
-                      <Text style={styles.deleteCategoryName}>
-                        {categoriaPersonalizada.nome}
-                      </Text>
-                    </View>
+                <PremiumCard style={styles.deleteCategoriesCard}>
+                  {categoriasPersonalizadas.map((categoriaPersonalizada) => (
+                    <View key={categoriaPersonalizada.nome} style={styles.deleteCategoryRow}>
+                      <View style={styles.deleteCategoryInfo}>
+                        <View
+                          style={[
+                            styles.deleteCategoryColor,
+                            { backgroundColor: categoriaPersonalizada.cor },
+                          ]}
+                        />
+                        <Text style={styles.deleteCategoryName}>{categoriaPersonalizada.nome}</Text>
+                      </View>
 
-                    <TouchableOpacity
-                      style={styles.deleteCategoryButton}
-                      onPress={() => apagarCategoria(categoriaPersonalizada.nome)}>
-                      <Text style={styles.deleteCategoryButtonText}>Remover</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-                </View>
+                      <PremiumButton
+                        secondary
+                        label="Remover"
+                        onPress={() => apagarCategoria(categoriaPersonalizada.nome)}
+                        style={styles.deleteCategoryButton}
+                      />
+                    </View>
+                  ))}
+                </PremiumCard>
               ) : null}
             </View>
           ) : null}
@@ -307,17 +295,12 @@ export default function AddItemScreen() {
             style={styles.input}
             keyboardType="number-pad"
             placeholder="Ex.: 3"
-            placeholderTextColor="#90a096"
+            placeholderTextColor="#90A096"
           />
 
-          <TouchableOpacity style={styles.primaryButton} onPress={salvar}>
-            <Text style={styles.primaryButtonText}>Adicionar a lista</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.secondaryButton} onPress={() => router.back()}>
-            <Text style={styles.secondaryButtonText}>Cancelar</Text>
-          </TouchableOpacity>
-        </View>
+          <PremiumButton label="Adicionar a lista" onPress={salvar} style={styles.primaryButton} />
+          <PremiumButton secondary label="Cancelar" onPress={() => router.back()} />
+        </PremiumCard>
       </ScrollView>
 
       <PremiumFeatureModal
@@ -327,115 +310,117 @@ export default function AddItemScreen() {
         title="Recurso Premium"
         description="Personalizacao esta disponivel apenas nos planos Pro e Familia."
       />
-    </LinearGradient>
+    </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   content: {
-    flexGrow: 1,
-    justifyContent: "center",
-    padding: 20,
+    paddingBottom: premiumSpacing.lg,
   },
   card: {
-    backgroundColor: "#e9eceb",
-    borderRadius: 28,
-    padding: 22,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.22,
-    shadowRadius: 3.84,
-    elevation: 5,
+    gap: premiumSpacing.sm,
+  },
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  topButton: {
+    minWidth: 108,
+  },
+  titleBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: premiumColors.successSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  titleBadgeText: {
+    color: premiumColors.primary,
+    fontSize: 28,
+    fontWeight: "800",
+    lineHeight: 30,
   },
   title: {
-    fontSize: 26,
-    fontWeight: "bold",
-    textAlign: "center",
-    color: "#2f5d45",
+    fontSize: 30,
+    fontWeight: "800",
+    color: premiumColors.text,
   },
   subtitle: {
-    textAlign: "center",
-    color: "#66766d",
-    marginTop: 6,
-    marginBottom: 22,
+    color: premiumColors.textSecondary,
+    marginTop: -10,
   },
   label: {
-    color: "#486756",
+    color: premiumColors.text,
     fontWeight: "700",
     marginBottom: 8,
-    marginTop: 8,
+    marginTop: 6,
   },
   input: {
-    backgroundColor: "#f7faf8",
-    borderRadius: 14,
+    backgroundColor: premiumColors.surface,
+    borderRadius: 16,
     paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingVertical: 14,
     fontSize: 16,
-    color: "#2f5d45",
+    color: premiumColors.text,
+    borderWidth: 1,
+    borderColor: premiumColors.border,
+    boxShadow: premiumShadows.soft,
   },
   categories: {
     flexDirection: "row",
     gap: 10,
-    marginBottom: 8,
     paddingRight: 10,
   },
   category: {
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 18,
-    backgroundColor: "#d3dcd7",
+    borderRadius: premiumRadius.pill,
+    backgroundColor: premiumColors.surfaceMuted,
     borderWidth: 2,
-    borderColor: "transparent",
   },
   categoryActive: {
-    backgroundColor: "#2f5d45",
+    backgroundColor: premiumColors.primary,
   },
   categoryText: {
-    color: "#42524a",
+    color: premiumColors.text,
     fontWeight: "600",
   },
   categoryTextActive: {
-    color: "#fff",
+    color: premiumColors.surface,
   },
   customToggle: {
-    backgroundColor: "#dce7e0",
-    borderRadius: 14,
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumRadius.md,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    marginBottom: 12,
   },
   customToggleActive: {
-    backgroundColor: "#2f5d45",
+    backgroundColor: premiumColors.primary,
   },
   customToggleText: {
-    color: "#3f5d4d",
+    color: premiumColors.text,
     fontWeight: "700",
     textAlign: "center",
   },
   customToggleTextActive: {
-    color: "#fff",
+    color: premiumColors.surface,
   },
   premiumHint: {
-    color: "#66766d",
-    marginBottom: 12,
+    color: premiumColors.textSecondary,
     lineHeight: 19,
     textAlign: "center",
   },
   customCard: {
-    backgroundColor: "#dce7e0",
-    borderRadius: 18,
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumRadius.lg,
     padding: 12,
-    marginBottom: 10,
     gap: 12,
   },
   rgbLabel: {
-    color: "#486756",
+    color: premiumColors.text,
     fontWeight: "700",
   },
   colorRow: {
@@ -448,30 +433,25 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 19,
     borderWidth: 2,
-    borderColor: "#ffffff",
+    borderColor: "#FFFFFF",
   },
   colorOptionActive: {
-    borderColor: "#2f5d45",
+    borderColor: premiumColors.text,
     transform: [{ scale: 1.08 }],
   },
   manageSection: {
-    marginBottom: 8,
+    gap: 8,
   },
   manageToggle: {
     alignSelf: "flex-start",
-    paddingHorizontal: 2,
     paddingVertical: 6,
-    marginBottom: 4,
   },
   manageToggleText: {
-    color: "#486756",
+    color: premiumColors.text,
     fontWeight: "700",
     fontSize: 13,
   },
   deleteCategoriesCard: {
-    backgroundColor: "#dce7e0",
-    borderRadius: 18,
-    padding: 12,
     gap: 10,
   },
   deleteCategoryRow: {
@@ -492,53 +472,24 @@ const styles = StyleSheet.create({
     borderRadius: 9,
   },
   deleteCategoryName: {
-    color: "#34443c",
+    color: premiumColors.text,
     fontWeight: "600",
     flexShrink: 1,
   },
   deleteCategoryButton: {
-    backgroundColor: "#e74c3c",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  deleteCategoryButtonText: {
-    color: "#fff",
-    fontWeight: "700",
+    width: 110,
   },
   primaryButton: {
-    backgroundColor: "#2f5d45",
-    paddingVertical: 15,
-    borderRadius: 14,
-    alignItems: "center",
-    marginTop: 24,
-  },
-  primaryButtonText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 16,
-  },
-  secondaryButton: {
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: "center",
-    marginTop: 10,
-    backgroundColor: "#d7dfda",
-  },
-  secondaryButtonText: {
-    color: "#3f5d4d",
-    fontWeight: "700",
+    marginTop: 8,
   },
   loadingCard: {
-    flex: 1,
-    margin: 20,
+    width: "100%",
+    minHeight: 180,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#e9eceb",
-    borderRadius: 24,
   },
   loadingText: {
-    color: "#2f5d45",
+    color: premiumColors.text,
     fontSize: 16,
     fontWeight: "600",
   },

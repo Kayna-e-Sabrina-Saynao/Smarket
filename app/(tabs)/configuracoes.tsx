@@ -1,25 +1,45 @@
-import { LinearGradient } from "expo-linear-gradient";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from "react-native";
 
 import { useBudget } from "@/context/budget-context";
-import { IconSymbol } from "@/components/ui/icon-symbol";
 import { PremiumFeatureModal } from "@/src/components/PremiumFeatureModal";
+import { PremiumButton } from "@/src/components/premium/PremiumButton";
+import { PremiumCard } from "@/src/components/premium/PremiumCard";
+import { PremiumScreen } from "@/src/components/premium/PremiumScreen";
 import { PLANS } from "@/src/config/plans";
+import { useCycle } from "@/src/context/CycleContext";
 import { useSubscription } from "@/src/context/subscription-context";
+import { disableNotifications, enableNotifications } from "@/src/services/notificationService";
+import { updateUserAppPreferences } from "@/src/services/subscriptionService";
 import {
   canCreateList,
   canExportPDF,
   canShareLists,
-  canUseFamilyFeatures,
   canUseCustomization,
+  canUseFamilyFeatures,
   getMaxFamilyMembers,
 } from "@/src/utils/planPermissions";
+import {
+  premiumColors,
+  premiumRadius,
+  premiumSpacing,
+} from "@/src/theme/premium-ui";
 
 export default function ConfiguracoesScreen() {
   const router = useRouter();
-  const { cicloAno, historicoCompras, onMarketItems, items } = useBudget();
+  const { historicoCompras, onMarketItems, items } = useBudget();
+  const { currentMonth, currentYear, cycleUpdating, getCurrentCycle, setCurrentMonth, setCurrentYear } =
+    useCycle();
   const {
     currentPlan,
     handleCancelSubscription,
@@ -29,11 +49,19 @@ export default function ConfiguracoesScreen() {
     isAdmin,
   } = useSubscription();
   const [premiumModalVisible, setPremiumModalVisible] = useState(false);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsEnabledUi, setNotificationsEnabledUi] = useState(
+    subscription?.notificationsEnabled === true
+  );
   const [premiumModalContent, setPremiumModalContent] = useState({
     title: "Recurso Premium",
     description: "Esse recurso esta disponivel nos planos Pro e Familia.",
   });
   const currentListCount = 1;
+
+  useEffect(() => {
+    setNotificationsEnabledUi(subscription?.notificationsEnabled === true);
+  }, [subscription?.notificationsEnabled]);
 
   const abrirPlanos = () => {
     setPremiumModalVisible(false);
@@ -130,25 +158,112 @@ export default function ConfiguracoesScreen() {
     }
   };
 
-  return (
-    <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonText}>Voltar</Text>
-          </TouchableOpacity>
+  const alterarMes = async (delta: number) => {
+    const proximoMes = currentMonth + delta;
 
-          <View style={styles.titleRow}>
-            <View style={styles.titleIcon}>
-              <IconSymbol name="gearshape.fill" size={18} color="#2f5d45" />
+    if (proximoMes < 0) {
+      await setCurrentYear(currentYear - 1);
+      await setCurrentMonth(11);
+      return;
+    }
+
+    if (proximoMes > 11) {
+      await setCurrentYear(currentYear + 1);
+      await setCurrentMonth(0);
+      return;
+    }
+
+    await setCurrentMonth(proximoMes);
+  };
+
+  const alterarAno = async (delta: number) => {
+    await setCurrentYear(currentYear + delta);
+  };
+
+  const alternarNotificacoes = async (valor: boolean) => {
+    const uid = subscription?.uid;
+
+    if (!uid || notificationsLoading) {
+      return;
+    }
+
+    setNotificationsLoading(true);
+
+    try {
+      if (valor) {
+        setNotificationsEnabledUi(true);
+        const permission = await enableNotifications();
+
+        if (!permission.granted) {
+          setNotificationsEnabledUi(false);
+          Alert.alert(
+            "Permissao necessaria",
+            "Ative as notificacoes nas configuracoes do dispositivo."
+          );
+          await updateUserAppPreferences(uid, {
+            notificationsEnabled: false,
+          });
+          return;
+        }
+
+        await updateUserAppPreferences(uid, {
+          notificationsEnabled: true,
+        });
+        return;
+      }
+
+      setNotificationsEnabledUi(false);
+      await disableNotifications();
+      await updateUserAppPreferences(uid, {
+        notificationsEnabled: false,
+      });
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  const ActionCard = ({
+    title,
+    description,
+    icon,
+    onPress,
+  }: {
+    title: string;
+    description: string;
+    icon: React.ComponentProps<typeof MaterialIcons>["name"];
+    onPress: () => void;
+  }) => (
+    <PremiumCard style={styles.actionCard}>
+      <View style={styles.actionHeader}>
+        <View style={styles.actionIcon}>
+          <MaterialIcons name={icon} size={20} color={premiumColors.primary} />
+        </View>
+        <View style={styles.actionTextWrap}>
+          <Text style={styles.actionTitle}>{title}</Text>
+          <Text style={styles.actionText}>{description}</Text>
+        </View>
+      </View>
+      <PremiumButton secondary label="Abrir" onPress={onPress} style={styles.actionButton} />
+    </PremiumCard>
+  );
+
+  return (
+    <PremiumScreen scroll={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <PremiumCard style={styles.card}>
+          <View style={styles.topBar}>
+            <PremiumButton secondary label="Voltar" onPress={() => router.back()} style={styles.topButton} />
+            <View style={styles.titleBadge}>
+              <MaterialIcons name="settings" size={22} color={premiumColors.primary} />
             </View>
-            <Text style={styles.title}>Configuracoes</Text>
           </View>
+
+          <Text style={styles.title}>Configuracoes</Text>
           <Text style={styles.subtitle}>Assinatura, limites e visao geral do seu ciclo</Text>
 
-          <View style={styles.planCard}>
+          <PremiumCard style={styles.planCard}>
             <View style={styles.planHeader}>
-              <View>
+              <View style={styles.planCopy}>
                 <Text style={styles.planLabel}>Plano atual</Text>
                 <Text style={styles.planValue}>
                   {isUltimate ? "Ultimate / Admin" : PLANS[currentPlan].name}
@@ -163,129 +278,194 @@ export default function ConfiguracoesScreen() {
                 </Text>
               </View>
 
-              <TouchableOpacity style={styles.planButton} onPress={() => router.push("/(tabs)/planos")}>
-                <Text style={styles.planButtonText}>Ver planos</Text>
-              </TouchableOpacity>
+              <PremiumButton
+                secondary
+                label="Ver planos"
+                onPress={() => router.push("/(tabs)/planos")}
+                style={styles.planButton}
+              />
             </View>
-          </View>
+          </PremiumCard>
 
-          <View style={styles.infoCard}>
+          <PremiumCard style={styles.infoCard}>
             <View style={styles.infoHeader}>
-              <Text style={styles.infoLabel}>Ano do ciclo</Text>
-              <IconSymbol name="gearshape.fill" size={16} color="#2f5d45" />
+              <View>
+                <Text style={styles.infoLabel}>Ciclo atual</Text>
+                <Text style={styles.infoValue} numberOfLines={1} ellipsizeMode="tail">
+                  {getCurrentCycle().fullLabel}
+                </Text>
+                <Text style={styles.infoHelper}>
+                  Mude o mes e o ano do ciclo.
+                </Text>
+              </View>
+              <View style={styles.iconBubble}>
+                <MaterialIcons name="tune" size={20} color={premiumColors.primary} />
+              </View>
             </View>
-            <Text style={styles.infoValue}>{cicloAno}</Text>
-            <Text style={styles.infoHelper}>Ciclo fixo do projeto por enquanto.</Text>
-          </View>
+
+            <View style={styles.cycleControls}>
+              <View style={styles.cycleControlGroup}>
+                <Text style={styles.cycleControlLabel}>Mes</Text>
+                <View style={styles.cycleButtonsRow}>
+                  <PremiumButton secondary label="-" onPress={() => alterarMes(-1)} style={styles.cycleButton} />
+                  <Text style={styles.cycleValue} numberOfLines={1} ellipsizeMode="tail">
+                    {getCurrentCycle().monthLabel}
+                  </Text>
+                  <PremiumButton secondary label="+" onPress={() => alterarMes(1)} style={styles.cycleButton} />
+                </View>
+              </View>
+
+              <View style={styles.cycleControlGroup}>
+                <Text style={styles.cycleControlLabel}>Ano</Text>
+                <View style={styles.cycleButtonsRow}>
+                  <PremiumButton secondary label="-" onPress={() => alterarAno(-1)} style={styles.cycleButton} />
+                  <Text style={styles.cycleValue}>{currentYear}</Text>
+                  <PremiumButton secondary label="+" onPress={() => alterarAno(1)} style={styles.cycleButton} />
+                </View>
+              </View>
+            </View>
+
+            {cycleUpdating ? (
+              <View style={styles.inlineStatus}>
+                <ActivityIndicator size="small" color={premiumColors.primary} />
+                <Text style={styles.inlineStatusText}>Atualizando ciclo...</Text>
+              </View>
+            ) : null}
+
+          </PremiumCard>
 
           {isAdmin ? (
-            <View style={styles.infoCard}>
+            <PremiumCard style={styles.infoCard}>
               <Text style={styles.infoLabel}>Acesso administrativo</Text>
               <Text style={styles.infoValue}>Ativo</Text>
               <Text style={styles.infoHelper}>
                 Sua conta esta usando acesso total por Firebase Custom Claims.
               </Text>
-            </View>
+            </PremiumCard>
           ) : null}
 
-          <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>Compras no historico</Text>
-            <Text style={styles.infoValue}>{historicoCompras.length}</Text>
+          <View style={styles.miniGrid}>
+            <PremiumCard style={styles.miniCard}>
+              <Text style={styles.infoLabel}>Compras no historico</Text>
+              <Text style={styles.infoValue}>{historicoCompras.length}</Text>
+            </PremiumCard>
+
+            <PremiumCard style={styles.miniCard}>
+              <Text style={styles.infoLabel}>Itens no mercado</Text>
+              <Text style={styles.infoValue}>{onMarketItems.length}</Text>
+            </PremiumCard>
+
+            <PremiumCard style={styles.miniCard}>
+              <Text style={styles.infoLabel}>Itens em orcamento</Text>
+              <Text style={styles.infoValue}>{items.length}</Text>
+            </PremiumCard>
           </View>
 
-          <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>Notificacoes</Text>
-            <Text style={styles.infoValue}>
-              {subscription?.notificationsEnabled ? "Ativas" : "Padrao do aparelho"}
-            </Text>
-          </View>
+          <PremiumCard style={styles.infoCard}>
+            <View style={styles.notificationRow}>
+              <View style={styles.notificationInfo}>
+                <Text style={styles.infoLabel}>Notificacoes</Text>
+                <Text style={styles.infoValue}>
+                  {notificationsEnabledUi ? "Ativadas" : "Desativadas"}
+                </Text>
+                <Text style={styles.infoHelper}>
+                  Controle lembretes e avisos do app sem perguntar permissao toda hora.
+                </Text>
+              </View>
+
+              <Switch
+                value={notificationsEnabledUi}
+                onValueChange={alternarNotificacoes}
+                disabled={notificationsLoading}
+                trackColor={{ false: "#D1D5DB", true: "#86EFAC" }}
+                thumbColor={notificationsEnabledUi ? premiumColors.primary : premiumColors.surface}
+              />
+            </View>
+
+            {notificationsLoading ? (
+              <View style={styles.inlineStatus}>
+                <ActivityIndicator size="small" color={premiumColors.primary} />
+                <Text style={styles.inlineStatusText}>Salvando preferencia...</Text>
+              </View>
+            ) : null}
+          </PremiumCard>
 
           {currentPlan !== "free" ? (
-            <TouchableOpacity style={styles.actionCard} onPress={abrirGerenciamentoAssinatura}>
-              <Text style={styles.actionTitle}>Gerenciar assinatura</Text>
-              <Text style={styles.actionText}>
-                Abra o centro de assinaturas da Google Play para cancelar ou revisar o plano.
-              </Text>
-            </TouchableOpacity>
+            <ActionCard
+              title="Gerenciar assinatura"
+              description="Abra o centro de assinaturas da Google Play para cancelar ou revisar o plano."
+              icon="credit-card"
+              onPress={abrirGerenciamentoAssinatura}
+            />
           ) : null}
-
-          <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>Itens no mercado</Text>
-            <Text style={styles.infoValue}>{onMarketItems.length}</Text>
-          </View>
-
-          <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>Itens em orcamento</Text>
-            <Text style={styles.infoValue}>{items.length}</Text>
-          </View>
 
           <Text style={styles.sectionTitle}>Recursos do plano</Text>
 
-          <TouchableOpacity style={styles.actionCard} onPress={lidarComNovaLista}>
-            <Text style={styles.actionTitle}>Criar nova lista</Text>
-            <Text style={styles.actionText}>Plano Gratis fica com 1 lista. Pro e Familia liberam ilimitadas.</Text>
-          </TouchableOpacity>
+          <ActionCard
+            title="Criar nova lista"
+            description="Plano Gratis fica com 1 lista. Pro e Familia liberam ilimitadas."
+            icon="playlist-add-circle"
+            onPress={lidarComNovaLista}
+          />
 
-          <TouchableOpacity style={styles.actionCard} onPress={lidarComCompartilhamento}>
-            <Text style={styles.actionTitle}>Compartilhar listas</Text>
-            <Text style={styles.actionText}>Pro e Familia podem receber o fluxo real de compartilhamento depois.</Text>
-          </TouchableOpacity>
+          <ActionCard
+            title="Compartilhar listas"
+            description="Pro e Familia podem receber o fluxo real de compartilhamento depois."
+            icon="group"
+            onPress={lidarComCompartilhamento}
+          />
 
-          <TouchableOpacity style={styles.actionCard} onPress={lidarComExportacao}>
-            <Text style={styles.actionTitle}>Exportar PDF</Text>
-            <Text style={styles.actionText}>A arquitetura fica pronta para gerar PDF das listas e compras.</Text>
-          </TouchableOpacity>
+          <ActionCard
+            title="Exportar PDF"
+            description="A arquitetura fica pronta para gerar PDF das listas e compras."
+            icon="picture-as-pdf"
+            onPress={lidarComExportacao}
+          />
 
-          <TouchableOpacity style={styles.actionCard} onPress={lidarComRecursosFamilia}>
-            <Text style={styles.actionTitle}>Gestao familiar</Text>
-            <Text style={styles.actionText}>
-              Sincronizacao e metas compartilhadas para ate {getMaxFamilyMembers("family", isUltimate)} membros.
-            </Text>
-          </TouchableOpacity>
+          <ActionCard
+            title="Gestao familiar"
+            description={`Sincronizacao e metas compartilhadas para ate ${getMaxFamilyMembers("family", isUltimate)} membros.`}
+            icon="diversity-3"
+            onPress={lidarComRecursosFamilia}
+          />
 
-          <TouchableOpacity style={styles.actionCard} onPress={lidarComPersonalizacao}>
-            <Text style={styles.actionTitle}>Personalizacao visual</Text>
-            <Text style={styles.actionText}>
-              Tema, aparencia, categorias personalizadas e ajustes visuais avancados.
-            </Text>
-          </TouchableOpacity>
+          <ActionCard
+            title="Personalizacao visual"
+            description="Tema, aparencia, categorias personalizadas e ajustes visuais avancados."
+            icon="palette"
+            onPress={lidarComPersonalizacao}
+          />
 
-          <TouchableOpacity style={styles.actionCard} onPress={abrirConvitesFamilia}>
-            <Text style={styles.actionTitle}>Convidar membros</Text>
-            <Text style={styles.actionText}>
-              Compartilhe link, codigo ou QR Code para montar sua familia no app.
-            </Text>
-          </TouchableOpacity>
+          <ActionCard
+            title="Convidar membros"
+            description="Compartilhe link, codigo ou QR Code para montar sua familia no app."
+            icon="qr-code-2"
+            onPress={abrirConvitesFamilia}
+          />
 
           <Text style={styles.sectionTitle}>Play Store ready</Text>
 
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => router.push("/(tabs)/privacidade")}>
-            <Text style={styles.actionTitle}>Politica de Privacidade</Text>
-            <Text style={styles.actionText}>
-              Transparencia sobre dados, sincronizacao e armazenamento.
-            </Text>
-          </TouchableOpacity>
+          <ActionCard
+            title="Politica de Privacidade"
+            description="Transparencia sobre dados, sincronizacao e armazenamento."
+            icon="policy"
+            onPress={() => router.push("/(tabs)/privacidade")}
+          />
 
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => router.push("/(tabs)/termos")}>
-            <Text style={styles.actionTitle}>Termos de Uso</Text>
-            <Text style={styles.actionText}>
-              Regras simples para uso do aplicativo e dos planos.
-            </Text>
-          </TouchableOpacity>
+          <ActionCard
+            title="Termos de Uso"
+            description="Regras simples para uso do aplicativo e dos planos."
+            icon="gavel"
+            onPress={() => router.push("/(tabs)/termos")}
+          />
 
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => router.push("/(tabs)/sobre")}>
-            <Text style={styles.actionTitle}>Sobre o aplicativo</Text>
-            <Text style={styles.actionText}>
-              Nome, versao, descricao e base pronta para crescimento.
-            </Text>
-          </TouchableOpacity>
-        </View>
+          <ActionCard
+            title="Sobre o aplicativo"
+            description="Nome, versao, descricao e base pronta para crescimento."
+            icon="info"
+            onPress={() => router.push("/(tabs)/sobre")}
+          />
+        </PremiumCard>
       </ScrollView>
 
       <PremiumFeatureModal
@@ -295,133 +475,187 @@ export default function ConfiguracoesScreen() {
         title={premiumModalContent.title}
         description={premiumModalContent.description}
       />
-    </LinearGradient>
+    </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { flexGrow: 1, padding: 20, justifyContent: "center" },
+  content: {
+    paddingBottom: premiumSpacing.lg,
+  },
   card: {
-    backgroundColor: "#e9eceb",
-    borderRadius: 30,
-    padding: 22,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    gap: premiumSpacing.sm,
   },
-  backButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "#d7dfda",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 18,
-  },
-  backButtonText: { color: "#3f5d4d", fontWeight: "700" },
-  titleRow: {
+  topBar: {
     flexDirection: "row",
-    justifyContent: "center",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 10,
   },
-  titleIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#dce7e0",
+  topButton: {
+    minWidth: 108,
+  },
+  titleBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: premiumColors.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
   },
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    textAlign: "center",
-    color: "#2f5d45",
+    fontSize: 30,
+    fontWeight: "800",
+    color: premiumColors.text,
   },
   subtitle: {
-    textAlign: "center",
-    color: "#66766d",
-    marginTop: 6,
-    marginBottom: 20,
+    color: premiumColors.textSecondary,
+    marginTop: -10,
   },
   planCard: {
-    backgroundColor: "#f3f8f5",
-    borderRadius: 22,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#d4e3da",
+    backgroundColor: "#F0FDF4",
+    borderColor: "#BBF7D0",
+    padding: premiumSpacing.sm,
   },
   planHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
+    gap: 14,
+  },
+  planCopy: {
+    gap: 4,
   },
   planLabel: {
-    color: "#567064",
-    marginBottom: 4,
+    color: premiumColors.textSecondary,
   },
   planValue: {
-    color: "#173428",
+    color: premiumColors.text,
     fontWeight: "800",
     fontSize: 22,
   },
   planHelper: {
-    color: "#6c7a73",
-    marginTop: 6,
+    color: premiumColors.textSecondary,
+    marginTop: 2,
   },
   planButton: {
-    backgroundColor: "#2f5d45",
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  planButtonText: {
-    color: "#fff",
-    fontWeight: "700",
+    width: "100%",
   },
   infoCard: {
-    backgroundColor: "#dce7e0",
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 12,
+    gap: 12,
   },
   infoHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    gap: 12,
+  },
+  infoLabel: {
+    color: premiumColors.textSecondary,
     marginBottom: 4,
   },
-  infoLabel: { color: "#567064", marginBottom: 4 },
-  infoValue: { color: "#2f5d45", fontWeight: "800", fontSize: 22 },
-  infoHelper: { color: "#6c7a73", marginTop: 6 },
-  sectionTitle: {
-    color: "#2f5d45",
+  infoValue: {
+    color: premiumColors.text,
     fontWeight: "800",
-    fontSize: 17,
-    marginTop: 8,
+    fontSize: 22,
+  },
+  infoHelper: {
+    color: premiumColors.textSecondary,
+    marginTop: 6,
+    lineHeight: 20,
+  },
+  iconBubble: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: premiumColors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cycleControls: {
+    gap: 12,
+  },
+  cycleControlGroup: {
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumRadius.lg,
+    padding: 14,
+  },
+  cycleControlLabel: {
+    color: premiumColors.textSecondary,
+    fontSize: 12,
     marginBottom: 10,
+  },
+  cycleButtonsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  cycleButton: {
+    width: 58,
+  },
+  cycleValue: {
+    color: premiumColors.text,
+    fontWeight: "800",
+    fontSize: 15,
+    flex: 1,
+    textAlign: "center",
+    overflow: "hidden",
+  },
+  notificationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+  },
+  notificationInfo: {
+    flex: 1,
+  },
+  inlineStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  inlineStatusText: {
+    color: premiumColors.textSecondary,
+    fontSize: 13,
+  },
+  miniGrid: {
+    gap: 12,
+  },
+  miniCard: {
+    padding: premiumSpacing.sm,
+  },
+  sectionTitle: {
+    color: premiumColors.text,
+    fontWeight: "800",
+    fontSize: 18,
+    marginTop: 4,
   },
   actionCard: {
-    backgroundColor: "#f4f7f5",
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#dce7e0",
+    gap: 14,
+  },
+  actionHeader: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  actionIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: premiumColors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionTextWrap: {
+    flex: 1,
   },
   actionTitle: {
-    color: "#173428",
+    color: premiumColors.text,
     fontWeight: "800",
     fontSize: 15,
     marginBottom: 6,
   },
   actionText: {
-    color: "#607068",
+    color: premiumColors.textSecondary,
     lineHeight: 20,
+  },
+  actionButton: {
+    width: "100%",
   },
 });

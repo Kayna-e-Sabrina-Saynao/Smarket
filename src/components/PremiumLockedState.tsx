@@ -1,5 +1,10 @@
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+
+import { PremiumButton } from "@/src/components/premium/PremiumButton";
+import { PremiumCard } from "@/src/components/premium/PremiumCard";
+import { premiumColors, premiumSpacing } from "@/src/theme/premium-ui";
 
 type PremiumLockedStateProps = {
   title: string;
@@ -13,68 +18,52 @@ export function PremiumLockedState({
   onViewPlans,
 }: PremiumLockedStateProps) {
   return (
-    <View style={styles.card}>
+    <PremiumCard style={styles.card}>
       <View style={styles.lockBadge}>
         <Text style={styles.lockBadgeText}>Premium</Text>
       </View>
+      <View style={styles.iconBubble}>
+        <MaterialIcons name="workspace-premium" size={24} color={premiumColors.primary} />
+      </View>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.description}>{description}</Text>
-      <TouchableOpacity style={styles.button} onPress={onViewPlans}>
-        <Text style={styles.buttonText}>Ver planos</Text>
-      </TouchableOpacity>
-    </View>
+      <PremiumButton label="Ver planos" onPress={onViewPlans} />
+    </PremiumCard>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#e9eceb",
-    margin: 20,
-    marginTop: 40,
-    padding: 24,
-    borderRadius: 28,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.22,
-    shadowRadius: 4,
-    elevation: 5,
+    width: "100%",
+    gap: premiumSpacing.sm,
   },
   lockBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "#dce7e0",
+    backgroundColor: premiumColors.successSoft,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 7,
-    marginBottom: 14,
   },
   lockBadgeText: {
-    color: "#2f5d45",
+    color: premiumColors.primary,
     fontWeight: "800",
     fontSize: 12,
   },
+  iconBubble: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: premiumColors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   title: {
-    color: "#173428",
+    color: premiumColors.text,
     fontSize: 24,
     fontWeight: "800",
-    marginBottom: 8,
   },
   description: {
-    color: "#61736a",
+    color: premiumColors.textSecondary,
     lineHeight: 22,
-    marginBottom: 20,
-  },
-  button: {
-    backgroundColor: "#2f5d45",
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 15,
   },
 });

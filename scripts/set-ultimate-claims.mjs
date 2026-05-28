@@ -27,11 +27,48 @@ const initializeAdmin = () => {
   });
 };
 
+const removeUltimateAdminClaims = async (auth, user) => {
+  const currentClaims = user.customClaims ?? {};
+
+  if (currentClaims.ultimate !== true && currentClaims.admin !== true) {
+    return false;
+  }
+
+  const { ultimate, admin, ...remainingClaims } = currentClaims;
+
+  await auth.setCustomUserClaims(
+    user.uid,
+    Object.keys(remainingClaims).length > 0 ? remainingClaims : null
+  );
+
+  return true;
+};
+
 const run = async () => {
   initializeAdmin();
 
   const auth = getAuth();
   const user = await auth.getUserByEmail(OWNER_EMAIL);
+  let nextPageToken = undefined;
+  let removedClaimsCount = 0;
+
+  do {
+    const page = await auth.listUsers(1000, nextPageToken);
+
+    for (const listedUser of page.users) {
+      if (listedUser.uid === user.uid) {
+        continue;
+      }
+
+      const removed = await removeUltimateAdminClaims(auth, listedUser);
+
+      if (removed) {
+        removedClaimsCount += 1;
+      }
+    }
+
+    nextPageToken = page.pageToken;
+  } while (nextPageToken);
 
   await auth.setCustomUserClaims(user.uid, {
     ...(user.customClaims ?? {}),
@@ -40,6 +77,7 @@ const run = async () => {
   });
 
   console.log(`Custom Claims aplicadas com sucesso ao UID ${user.uid}.`);
+  console.log(`Claims ultimate/admin removidas de ${removedClaimsCount} outra(s) conta(s).`);
   console.log("Peca para a conta fazer login novamente ou force refresh do token.");
 };
 
