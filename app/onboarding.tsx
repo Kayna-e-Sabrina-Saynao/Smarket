@@ -1,10 +1,13 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import { PremiumButton } from "@/src/components/premium/PremiumButton";
+import { PremiumCard } from "@/src/components/premium/PremiumCard";
+import { PremiumScreen } from "@/src/components/premium/PremiumScreen";
 import { completeOnboarding } from "@/src/services/onboardingService";
+import { premiumColors, premiumRadius, premiumSpacing } from "@/src/theme/premium-ui";
 
 const STEPS = [
   {
@@ -70,79 +73,76 @@ export default function OnboardingScreen({
   };
 
   return (
-    <LinearGradient colors={["#73b48b", "#2f5d45"]} style={styles.container}>
-      <View style={styles.card}>
-        <View style={styles.skipRow}>
-          <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
-            <Text style={styles.skipText}>{isLastStep ? "Finalizar" : "Pular"}</Text>
-          </TouchableOpacity>
-        </View>
+    <PremiumScreen scroll={false}>
+      <View style={styles.wrapper}>
+        <PremiumCard style={styles.card}>
+          <View style={styles.skipRow}>
+            <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+              <Text style={styles.skipText}>{isLastStep ? "Finalizar" : "Pular"}</Text>
+            </TouchableOpacity>
+          </View>
 
-        <View style={styles.hero}>
-          <View style={styles.illustrationCircle}>
-            <View style={styles.illustrationBadge}>
-              <MaterialIcons name={currentStep.icon} size={58} color="#2f5d45" />
-            </View>
+          <View style={styles.hero}>
+            <View style={styles.illustrationCircle}>
+              <View style={styles.illustrationBadge}>
+                <MaterialIcons name={currentStep.icon} size={58} color={premiumColors.primary} />
+              </View>
 
-            <View style={styles.illustrationCard}>
-              <View style={styles.listLineWide} />
-              <View style={styles.listLineMedium} />
-              <View style={styles.listLineShort} />
+              <View style={styles.illustrationCard}>
+                <View style={styles.listLineWide} />
+                <View style={styles.listLineMedium} />
+                <View style={styles.listLineShort} />
+              </View>
             </View>
           </View>
-        </View>
 
-        <Text style={styles.title}>{currentStep.title}</Text>
-        <Text style={styles.description}>{currentStep.description}</Text>
+          <Text style={styles.title}>{currentStep.title}</Text>
+          <Text style={styles.description}>{currentStep.description}</Text>
 
-        <View style={styles.pagination}>
-          {STEPS.map((_, index) => (
-            <View
-              key={index}
-              style={[styles.dot, index === stepIndex && styles.dotActive]}
-            />
-          ))}
-        </View>
+          <View style={styles.pagination}>
+            {STEPS.map((_, index) => (
+              <View
+                key={index}
+                style={[styles.dot, index === stepIndex && styles.dotActive]}
+              />
+            ))}
+          </View>
 
-        <TouchableOpacity style={styles.primaryButton} onPress={handleContinue}>
-          <Text style={styles.primaryButtonText}>
-            {saving ? "Preparando..." : isLastStep ? "Comecar" : "Continuar"}
-          </Text>
-        </TouchableOpacity>
+          <PremiumButton
+            label={saving ? "Preparando..." : isLastStep ? "Comecar" : "Continuar"}
+            onPress={handleContinue}
+            disabled={saving}
+            style={styles.primaryButton}
+          />
+        </PremiumCard>
       </View>
-    </LinearGradient>
+    </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  wrapper: {
     flex: 1,
     justifyContent: "center",
-    padding: 20,
+    padding: premiumSpacing.sm,
   },
   card: {
-    backgroundColor: "#eef3ef",
-    borderRadius: 32,
-    padding: 24,
     minHeight: "82%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-    elevation: 8,
     justifyContent: "space-between",
+    gap: 0,
+    padding: premiumSpacing.md,
   },
   skipRow: {
     alignItems: "flex-end",
   },
   skipButton: {
-    backgroundColor: "#dbe7df",
-    borderRadius: 999,
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumRadius.pill,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   skipText: {
-    color: "#335d47",
+    color: premiumColors.textSecondary,
     fontWeight: "700",
   },
   hero: {
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 110,
-    backgroundColor: "#dff3e3",
+    backgroundColor: premiumColors.successSoft,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
@@ -162,10 +162,10 @@ const styles = StyleSheet.create({
     width: 112,
     height: 112,
     borderRadius: 56,
-    backgroundColor: "#f7fbf8",
+    backgroundColor: premiumColors.surface,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#2f5d45",
+    shadowColor: premiumColors.primary,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
@@ -176,31 +176,31 @@ const styles = StyleSheet.create({
     bottom: 22,
     right: 18,
     width: 92,
-    backgroundColor: "#ffffff",
+    backgroundColor: premiumColors.surface,
     borderRadius: 18,
     padding: 14,
     gap: 8,
   },
   listLineWide: {
     height: 8,
-    borderRadius: 999,
-    backgroundColor: "#bdd9c3",
+    borderRadius: premiumRadius.pill,
+    backgroundColor: premiumColors.primarySecondary,
   },
   listLineMedium: {
     width: "76%",
     height: 8,
-    borderRadius: 999,
-    backgroundColor: "#d3e7d7",
+    borderRadius: premiumRadius.pill,
+    backgroundColor: premiumColors.successSoft,
   },
   listLineShort: {
     width: "58%",
     height: 8,
-    borderRadius: 999,
-    backgroundColor: "#d3e7d7",
+    borderRadius: premiumRadius.pill,
+    backgroundColor: premiumColors.successSoft,
   },
   title: {
     marginTop: 24,
-    color: "#173428",
+    color: premiumColors.text,
     fontSize: 30,
     lineHeight: 36,
     textAlign: "center",
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   },
   description: {
     marginTop: 14,
-    color: "#607068",
+    color: premiumColors.textSecondary,
     textAlign: "center",
     lineHeight: 22,
     fontSize: 16,
@@ -224,22 +224,13 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: "#c5d4cb",
+    backgroundColor: premiumColors.border,
   },
   dotActive: {
     width: 28,
-    backgroundColor: "#2f5d45",
+    backgroundColor: premiumColors.primary,
   },
   primaryButton: {
-    backgroundColor: "#2f5d45",
-    borderRadius: 18,
-    paddingVertical: 16,
-    alignItems: "center",
     marginTop: 30,
-  },
-  primaryButtonText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 16,
   },
 });
