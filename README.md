@@ -1,50 +1,108 @@
-# Welcome to your Expo app 👋
+# SMARKET
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Organize compras, compartilhe listas e acompanhe gastos — direto do seu celular.
 
-## Get started
+Aplicativo mobile construído com **React Native + Expo** e **Firebase** (Authentication e Firestore), com suporte a Android, iOS e Web.
 
-1. Install dependencies
+## Funcionalidades
 
-   ```bash
-   npm install
-   ```
+- **Listas de compras**: adicione itens, defina quantidades e finalize a compra com um toque.
+- **Orçamento mensal**: defina um valor limite e acompanhe o quanto já foi gasto no ciclo.
+- **Resumo financeiro**: dashboard com gastos, itens e histórico do ciclo atual.
+- **Histórico de compras**: navegue entre meses e anos para rever compras passadas.
+- **Notas fiscais em PDF**: gere e compartilhe a nota da compra como PDF.
+- **Ciclos de compra**: mude o mês/ano ativo e veja os dados do período selecionado.
+- **Estatísticas por categoria**: entenda onde seu dinheiro vai.
+- **Planos e assinatura**: modelos gratuito e premium (IAP) com recursos exclusivos.
+- **Família**: código de convite e QR Code para conectar membros no plano premium.
+- **Onboarding guiado** e autenticação com e-mail/senha.
+- **Notificações locais** e **analytics** de uso.
 
-2. Start the app
+## Stack
 
-   ```bash
-   npx expo start
-   ```
+| Camada | Tecnologia |
+| --- | --- |
+| Framework | React Native 0.81 + Expo SDK 54 |
+| Navegação | Expo Router (file-based routing) |
+| Linguagem | TypeScript (strict) |
+| Backend | Firebase Authentication + Firestore |
+| Pagamentos | expo-iap (compra dentro do app) |
+| PDF | expo-print + expo-sharing |
+| QR Code | react-native-qrcode-svg |
+| Analytics | serviço próprio em `src/services/analyticsService.ts` |
 
-In the output, you'll find options to open the app in a
+## Estrutura do projeto
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+app/                  # Rotas e telas (Expo Router)
+  (tabs)/             # Abas principais do app autenticado
+  index.tsx           # Tela de login/cadastro
+  onboarding.tsx      # Onboarding guiado
+  compra/[id].tsx     # Detalhe de uma compra + PDF
+  nota/[id].tsx       # Visualização da nota
+  categoria/[categoria].tsx # Itens por categoria
+context/              # Contexto de orçamento (budget-context)
+src/
+  components/         # Componentes reutilizáveis (incl. premium/*)
+  config/             # Planos e configuração do app
+  context/            # Ciclos (CycleContext) e assinatura
+  screens/            # Telas reutilizáveis (ex.: PlansScreen)
+  services/           # Firebase, analytics, billing, PDF, notificações
+  theme/              # Tema premium (cores, raio, sombras)
+  types/              # Tipos TypeScript
+  utils/              # Permissões de plano e utilitários
+functions/            # Cloud Functions do Firebase
+firebaseConfig.ts     # Inicialização do Firebase
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Como rodar
 
-## Learn more
+Pré-requisitos: [Node.js](https://nodejs.org) 20+ e o app **Expo Go** no celular (ou um emulador).
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+# 1. Instale as dependências
+npm install
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+# 2. Configure o Firebase (veja abaixo)
 
-## Join the community
+# 3. Inicie o servidor de desenvolvimento
+npx expo start
+```
 
-Join our community of developers creating universal apps.
+No terminal, pressione `a` para Android, `i` para iOS ou `w` para Web. Você também pode escanear o QR Code com o Expo Go.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### Configuração do Firebase
+
+1. Crie um projeto no [Firebase Console](https://console.firebase.google.com).
+2. Ative **Authentication** (e-mail/senha) e **Cloud Firestore**.
+3. Copie o objeto de configuração para o arquivo `firebaseConfig.ts` (use `firebaseConfig.example.ts` como base, se disponível).
+4. Publique as regras de segurança em `firestore.rules` e implante as funções de `functions/`, se usadas.
+
+> A `apiKey` do Firebase é pública por design — a segurança dos dados é garantida pelas **regras do Firestore**, não pela chave.
+
+### Scripts
+
+```bash
+npm start            # Inicia o Expo
+npm run android      # Inicia no Android
+npm run ios          # Inicia no iOS
+npm run web          # Inicia no navegador
+npm run lint         # ESLint (config expo)
+npx tsc --noEmit     # Type check
+```
+
+## Convenções de código
+
+- Commits seguem o padrão **Conventional Commits**: `feat:`, `fix:`, `refactor:`, `style:`, `docs:`, `chore:`.
+- Branch principal de desenvolvimento: `ultima-versao` (espelho em `main` no GitHub).
+- Todo código passa por `npx tsc --noEmit` e `npm run lint` antes de commitar.
+
+## Documentação e roadmap
+
+- [Roadmap](./docs/roadmap.md) — estado atual e próximos passos.
+- [Arquitetura](./docs/arquitetura.md) — visão técnica do projeto.
+- [Git e GitHub](./docs/git-workflow.md) — fluxo de trabalho recomendado.
+
+## Licença
+
+Projeto privado — todos os direitos reservados.
