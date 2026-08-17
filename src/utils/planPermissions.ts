@@ -22,6 +22,24 @@ export const canCreateList = (
   return currentListCount < maxLists;
 };
 
+export const canAddProducts = (
+  userPlan: SmarketPlanId = "free",
+  currentProductCount: number,
+  hasUltimateAccess = false
+) => {
+  if (hasUltimateOverride(hasUltimateAccess)) {
+    return true;
+  }
+
+  const maxProducts = getPlanConfig(userPlan).limits.maxProducts;
+
+  if (maxProducts === null) {
+    return true;
+  }
+
+  return currentProductCount < maxProducts;
+};
+
 export const canShareLists = (
   userPlan: SmarketPlanId = "free",
   hasUltimateAccess = false
@@ -80,4 +98,15 @@ export const getMaxFamilyMembers = (
   }
 
   return getPlanConfig(userPlan).limits.maxFamilyMembers;
+};
+
+export const getMaxProducts = (
+  userPlan: SmarketPlanId = "free",
+  hasUltimateAccess = false
+) => {
+  if (hasUltimateOverride(hasUltimateAccess)) {
+    return null;
+  }
+
+  return getPlanConfig(userPlan).limits.maxProducts;
 };

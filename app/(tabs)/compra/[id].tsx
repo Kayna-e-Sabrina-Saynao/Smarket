@@ -3,6 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,7 +14,9 @@ import {
 import { useBudget } from "@/context/budget-context";
 import { PremiumFeatureModal } from "@/src/components/PremiumFeatureModal";
 import { PremiumLockedState } from "@/src/components/PremiumLockedState";
+import { PremiumButton } from "@/src/components/premium/PremiumButton";
 import { useSubscription } from "@/src/context/subscription-context";
+import { baixarOuCompartilharPdfCompra } from "@/src/services/purchasePdfService";
 import { canViewHistory } from "@/src/utils/planPermissions";
 
 const formatarMoeda = (valor: number) =>
@@ -34,9 +37,10 @@ export default function CompraDetalheScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
   const { buscarCompraPorId, carregandoDados } = useBudget();
-  const { currentPlan, subscriptionLoading, isUltimate } = useSubscription();
+  const { currentPlan, subscriptionLoading, isUltimate, subscription } = useSubscription();
   const [premiumModalVisible, setPremiumModalVisible] = useState(false);
   const [premiumNoticeShown, setPremiumNoticeShown] = useState(false);
+  const [baixandoPdf, setBaixandoPdf] = useState(false);
   const compraId = Number(params.id);
   const compra = Number.isNaN(compraId) ? undefined : buscarCompraPorId(compraId);
   const premiumBlocked = !canViewHistory(currentPlan, isUltimate);
@@ -93,6 +97,32 @@ export default function CompraDetalheScreen() {
     );
   }
 
+  const baixarPdf = async () => {
+    if (baixandoPdf) {
+      return;
+    }
+
+    if (!compra.items.length) {
+      Alert.alert("Sem produtos", "Essa compra nao possui produtos para gerar o PDF.");
+      return;
+    }
+
+    setBaixandoPdf(true);
+
+    try {
+      await baixarOuCompartilharPdfCompra(compra, subscription?.name);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Nao foi possivel gerar o PDF dessa compra agora.";
+
+      Alert.alert("Erro ao gerar PDF", message);
+    } finally {
+      setBaixandoPdf(false);
+    }
+  };
+
   return (
     <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -114,6 +144,13 @@ export default function CompraDetalheScreen() {
               </Text>
             ) : null}
           </View>
+
+          <PremiumButton
+            label={baixandoPdf ? "Gerando PDF..." : "Baixar PDF"}
+            onPress={baixarPdf}
+            disabled={baixandoPdf}
+            style={styles.pdfButton}
+          />
 
           <Text style={styles.sectionTitle}>Categorias</Text>
           <View style={styles.categoryRow}>
@@ -247,6 +284,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
     fontWeight: "600",
+  },
+  pdfButton: {
+    marginBottom: 8,
   },
   sectionTitle: {
     color: "#2f5d45",

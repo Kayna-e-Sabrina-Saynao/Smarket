@@ -17,6 +17,8 @@ export type UserSubscription = {
   hasCompletedOnboarding: boolean;
   inviteCode: string | null;
   notificationsEnabled: boolean;
+  selectedCycleMonth: number | null;
+  selectedCycleYear: number | null;
   createdAt: Date | null;
   updatedAt: Date | null;
 };

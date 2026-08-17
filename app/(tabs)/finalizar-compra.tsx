@@ -1,25 +1,17 @@
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { useBudget } from "@/context/budget-context";
+import { PremiumButton } from "@/src/components/premium/PremiumButton";
+import { PremiumCard } from "@/src/components/premium/PremiumCard";
+import { PremiumScreen } from "@/src/components/premium/PremiumScreen";
 import { useSubscription } from "@/src/context/subscription-context";
 import { trackEvent } from "@/src/services/analyticsService";
-import {
-  notifyPurchaseAdded,
-  scheduleInactivityReminder,
-} from "@/src/services/notificationService";
+import { notifyPurchaseAdded, scheduleInactivityReminder } from "@/src/services/notificationService";
+import { premiumColors, premiumRadius, premiumShadows, premiumSpacing } from "@/src/theme/premium-ui";
 import { canTrackBuyer, canUseFamilyFeatures } from "@/src/utils/planPermissions";
 
 const normalizarData = (valor: string) => {
@@ -60,19 +52,22 @@ export default function FinalizarCompraScreen() {
   const [dataCompra, setDataCompra] = useState(dataAtualFormatada);
   const [fotoNotaUri, setFotoNotaUri] = useState<string | null>(null);
   const [comprador, setComprador] = useState("");
+  const [compradorInicializado, setCompradorInicializado] = useState(false);
   const trackingEnabled = canTrackBuyer(currentPlan, isUltimate);
   const familyEnabled = canUseFamilyFeatures(currentPlan, isUltimate);
   const membrosFamilia = subscription?.familyMembers ?? [];
 
   useEffect(() => {
-    if (!trackingEnabled || comprador.trim().length > 0) {
+    if (!trackingEnabled) {
+      setCompradorInicializado(false);
       return;
     }
 
-    if (subscription?.name) {
+    if (!compradorInicializado && subscription?.name) {
       setComprador(subscription.name);
+      setCompradorInicializado(true);
     }
-  }, [comprador, subscription?.name, trackingEnabled]);
+  }, [compradorInicializado, subscription?.name, trackingEnabled]);
 
   const selecionarImagem = async () => {
     const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -150,12 +145,15 @@ export default function FinalizarCompraScreen() {
   };
 
   return (
-    <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+    <PremiumScreen scroll={false}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonText}>Voltar</Text>
-          </TouchableOpacity>
+        <PremiumCard style={styles.card}>
+          <View style={styles.topBar}>
+            <PremiumButton secondary label="Voltar" onPress={() => router.back()} style={styles.topButton} />
+            <View style={styles.titleBadge}>
+              <Text style={styles.titleBadgeText}>✓</Text>
+            </View>
+          </View>
 
           <Text style={styles.title}>Finalizar Compra</Text>
           <Text style={styles.subtitle}>Preencha os dados finais da compra</Text>
@@ -166,7 +164,7 @@ export default function FinalizarCompraScreen() {
             onChangeText={setNomeCompra}
             style={styles.input}
             placeholder="Ex.: Compra da semana"
-            placeholderTextColor="#90a096"
+            placeholderTextColor="#90A096"
           />
 
           <Text style={styles.label}>Data</Text>
@@ -175,20 +173,20 @@ export default function FinalizarCompraScreen() {
             onChangeText={setDataCompra}
             style={styles.input}
             placeholder="Ex.: 27/04/2026"
-            placeholderTextColor="#90a096"
+            placeholderTextColor="#90A096"
           />
 
           <Text style={styles.label}>Foto da nota (opcional)</Text>
-          <TouchableOpacity style={styles.uploadButton} onPress={selecionarImagem}>
-            <Text style={styles.uploadButtonText}>
-              {fotoNotaUri ? "Trocar imagem da nota" : "Adicionar foto da nota"}
-            </Text>
-          </TouchableOpacity>
+          <PremiumButton
+            secondary
+            label={fotoNotaUri ? "Trocar imagem da nota" : "Adicionar foto da nota"}
+            onPress={selecionarImagem}
+          />
 
           {fotoNotaUri ? (
-            <View style={styles.previewCard}>
+            <PremiumCard style={styles.previewCard}>
               <Image source={{ uri: fotoNotaUri }} style={styles.previewImage} contentFit="cover" />
-            </View>
+            </PremiumCard>
           ) : null}
 
           {trackingEnabled ? (
@@ -209,18 +207,13 @@ export default function FinalizarCompraScreen() {
                     const selecionado = comprador.trim().toLowerCase() === membro.toLowerCase();
 
                     return (
-                      <TouchableOpacity
+                      <PremiumButton
                         key={membro}
-                        style={[styles.memberChip, selecionado && styles.memberChipActive]}
-                        onPress={() => setComprador(membro)}>
-                        <Text
-                          style={[
-                            styles.memberChipText,
-                            selecionado && styles.memberChipTextActive,
-                          ]}>
-                          {membro}
-                        </Text>
-                      </TouchableOpacity>
+                        secondary={!selecionado}
+                        label={membro}
+                        onPress={() => setComprador(membro)}
+                        style={styles.memberChip}
+                      />
                     );
                   })}
                 </ScrollView>
@@ -231,145 +224,100 @@ export default function FinalizarCompraScreen() {
                 onChangeText={setComprador}
                 style={styles.input}
                 placeholder="Ex.: Paulo"
-                placeholderTextColor="#90a096"
+                placeholderTextColor="#90A096"
               />
             </View>
           ) : null}
 
-          <TouchableOpacity style={styles.primaryButton} onPress={finalizar}>
-            <Text style={styles.primaryButtonText}>Finalizar compra</Text>
-          </TouchableOpacity>
-        </View>
+          <PremiumButton label="Finalizar compra" onPress={finalizar} style={styles.primaryButton} />
+        </PremiumCard>
       </ScrollView>
-    </LinearGradient>
+    </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   content: {
-    flexGrow: 1,
-    padding: 20,
-    justifyContent: "center",
+    paddingBottom: premiumSpacing.lg,
   },
   card: {
-    backgroundColor: "#e9eceb",
-    borderRadius: 30,
-    padding: 22,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    gap: premiumSpacing.sm,
   },
-  backButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "#d7dfda",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 18,
-  },
-  backButtonText: {
-    color: "#3f5d4d",
-    fontWeight: "700",
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    textAlign: "center",
-    color: "#2f5d45",
-  },
-  subtitle: {
-    textAlign: "center",
-    color: "#66766d",
-    marginTop: 6,
-    marginBottom: 22,
-  },
-  label: {
-    color: "#486756",
-    fontWeight: "700",
-    marginBottom: 8,
-    marginTop: 10,
-  },
-  input: {
-    backgroundColor: "#f7faf8",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    fontSize: 16,
-    color: "#2f5d45",
-  },
-  uploadButton: {
-    backgroundColor: "#dce7e0",
-    borderRadius: 14,
-    paddingVertical: 14,
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
   },
-  uploadButtonText: {
-    color: "#2f5d45",
+  topButton: {
+    minWidth: 108,
+  },
+  titleBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: premiumColors.successSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  titleBadgeText: {
+    color: premiumColors.primary,
+    fontSize: 24,
+    fontWeight: "800",
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: "800",
+    color: premiumColors.text,
+  },
+  subtitle: {
+    color: premiumColors.textSecondary,
+    marginTop: -10,
+  },
+  label: {
+    color: premiumColors.text,
     fontWeight: "700",
+    marginBottom: 8,
+    marginTop: 6,
+  },
+  input: {
+    backgroundColor: premiumColors.surface,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: premiumColors.text,
+    borderWidth: 1,
+    borderColor: premiumColors.border,
+    boxShadow: premiumShadows.soft,
   },
   previewCard: {
-    marginTop: 14,
-    backgroundColor: "#dce7e0",
-    borderRadius: 18,
     padding: 10,
   },
   previewImage: {
     width: "100%",
     height: 220,
     borderRadius: 14,
-    backgroundColor: "#c8d4ce",
+    backgroundColor: "#C8D4CE",
   },
   buyerCard: {
-    marginTop: 16,
-    backgroundColor: "#dce7e0",
-    borderRadius: 18,
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumRadius.lg,
     padding: 14,
+    gap: 12,
   },
   buyerHelper: {
-    color: "#607068",
+    color: premiumColors.textSecondary,
     lineHeight: 20,
-    marginBottom: 12,
   },
   membersRow: {
     flexDirection: "row",
     gap: 10,
     paddingRight: 10,
-    marginBottom: 12,
   },
   memberChip: {
-    backgroundColor: "#eef3f0",
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  memberChipActive: {
-    backgroundColor: "#2f5d45",
-  },
-  memberChipText: {
-    color: "#2f5d45",
-    fontWeight: "700",
-  },
-  memberChipTextActive: {
-    color: "#fff",
+    minWidth: 110,
   },
   primaryButton: {
-    backgroundColor: "#2f5d45",
-    paddingVertical: 15,
-    borderRadius: 14,
-    alignItems: "center",
-    marginTop: 24,
-  },
-  primaryButtonText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 16,
+    marginTop: 8,
   },
 });

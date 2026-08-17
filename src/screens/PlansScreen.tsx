@@ -44,7 +44,7 @@ export default function PlansScreen() {
       Alert.alert(
         "Plano atualizado",
         planId === "free"
-          ? "Seu plano Gratis esta ativo."
+          ? "Seu plano Grátis está ativo."
           : `Seu plano ${PLANS[planId].name} foi ativado com sucesso.`
       );
     } catch (error) {
@@ -87,7 +87,7 @@ export default function PlansScreen() {
 
           <Text style={styles.title}>Planos SMARKET</Text>
           <Text style={styles.subtitle}>
-            Escolha o plano certo para crescer com o app sem anuncios neste inicio.
+            Escolha entre uso básico, uso individual avançado ou gestão compartilhada da casa.
           </Text>
 
           {!billingAvailable ? (
@@ -118,7 +118,7 @@ export default function PlansScreen() {
                 ? "Comecar gratis"
                 : planId === "pro"
                   ? "Assinar Pro"
-                  : "Assinar Familia";
+                  : "Assinar Família";
 
             return (
               <PlanCard

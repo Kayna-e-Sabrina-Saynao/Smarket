@@ -1,18 +1,20 @@
-import { LinearGradient } from "expo-linear-gradient";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { CompraHistorico, useBudget } from "@/context/budget-context";
 import { PremiumFeatureModal } from "@/src/components/PremiumFeatureModal";
 import { PremiumLockedState } from "@/src/components/PremiumLockedState";
+import { PremiumButton } from "@/src/components/premium/PremiumButton";
+import { PremiumCard } from "@/src/components/premium/PremiumCard";
+import { PremiumScreen } from "@/src/components/premium/PremiumScreen";
+import { useCycle } from "@/src/context/CycleContext";
 import { useSubscription } from "@/src/context/subscription-context";
+import {
+  premiumColors,
+  premiumSpacing,
+} from "@/src/theme/premium-ui";
 import { canViewHistory } from "@/src/utils/planPermissions";
 
 const MESES = [
@@ -38,17 +40,21 @@ const formatarData = (data: string) => {
 };
 
 const formatarDataCurta = (data: Date | null, fallback: string) =>
-  data
-    ? data.toLocaleDateString("pt-BR")
-    : formatarData(fallback);
+  data ? data.toLocaleDateString("pt-BR") : formatarData(fallback);
 
 export default function HistoricoScreen() {
   const router = useRouter();
-  const { carregandoDados, historicoCompras, cicloAno, iniciarNovoCiclo } = useBudget();
+  const { carregandoDados, historicoCompras } = useBudget();
   const { currentPlan, subscriptionLoading, isUltimate } = useSubscription();
-  const [mesSelecionado, setMesSelecionado] = useState(new Date().getMonth());
   const [diaSelecionado, setDiaSelecionado] = useState<number | null>(null);
-  const [anoVisualizado, setAnoVisualizado] = useState(cicloAno);
+  const {
+    currentMonth,
+    currentYear,
+    cycleLoading,
+    cycleUpdating,
+    setCurrentMonth,
+    setCurrentYear,
+  } = useCycle();
   const [premiumModalVisible, setPremiumModalVisible] = useState(false);
   const [premiumNoticeShown, setPremiumNoticeShown] = useState(false);
   const premiumBlocked = !canViewHistory(currentPlan, isUltimate);
@@ -66,9 +72,9 @@ export default function HistoricoScreen() {
     () =>
       historicoCompras.filter((compra) => {
         const [ano, mes] = compra.data.split("-").map(Number);
-        return ano === anoVisualizado && mes - 1 === mesSelecionado;
+        return ano === currentYear && mes - 1 === currentMonth;
       }),
-    [anoVisualizado, historicoCompras, mesSelecionado]
+    [currentMonth, currentYear, historicoCompras]
   );
 
   const comprasDoDia = useMemo(() => {
@@ -84,8 +90,8 @@ export default function HistoricoScreen() {
     [comprasDoMes]
   );
 
-  const diasNoMes = new Date(anoVisualizado, mesSelecionado + 1, 0).getDate();
-  const primeiroDiaSemana = new Date(anoVisualizado, mesSelecionado, 1).getDay();
+  const diasNoMes = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const primeiroDiaSemana = new Date(currentYear, currentMonth, 1).getDay();
 
   const blocosCalendario = useMemo(() => {
     const blocos: { dia: number | null }[] = [];
@@ -101,43 +107,41 @@ export default function HistoricoScreen() {
     return blocos;
   }, [diasNoMes, primeiroDiaSemana]);
 
-  const mudarMes = (direcao: "anterior" | "proximo") => {
-    if (direcao === "anterior") {
-      if (mesSelecionado === 0) {
-        return;
-      }
+  const mudarMes = async (direcao: "anterior" | "proximo") => {
+    const novoMes = direcao === "anterior" ? currentMonth - 1 : currentMonth + 1;
 
-      setMesSelecionado((estadoAtual) => estadoAtual - 1);
+    if (novoMes < 0) {
+      await setCurrentYear(currentYear - 1);
+      await setCurrentMonth(11);
       setDiaSelecionado(null);
       return;
     }
 
-    if (mesSelecionado === 11) {
-      const proximoAno = anoVisualizado + 1;
-      iniciarNovoCiclo(proximoAno);
-      setAnoVisualizado(proximoAno);
-      setMesSelecionado(0);
+    if (novoMes > 11) {
+      await setCurrentYear(currentYear + 1);
+      await setCurrentMonth(0);
       setDiaSelecionado(null);
       return;
     }
 
-    setMesSelecionado((estadoAtual) => estadoAtual + 1);
+    await setCurrentMonth(novoMes);
     setDiaSelecionado(null);
   };
 
-  if (carregandoDados || subscriptionLoading) {
+  if (carregandoDados || subscriptionLoading || cycleLoading) {
     return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
-        <View style={styles.loadingCard}>
+      <PremiumScreen scroll={false}>
+        <PremiumCard style={styles.loadingCard}>
+          <ActivityIndicator size="small" color={premiumColors.primary} />
           <Text style={styles.loadingText}>Carregando historico...</Text>
-        </View>
-      </LinearGradient>
+        </PremiumCard>
+      </PremiumScreen>
     );
   }
 
   if (premiumBlocked) {
     return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+      <PremiumScreen scroll={false}>
         <PremiumLockedState
           title="Historico avancado bloqueado"
           description="Esse calendario completo de compras fica disponivel nos planos Pro e Familia."
@@ -154,34 +158,44 @@ export default function HistoricoScreen() {
             router.push("/(tabs)/planos");
           }}
         />
-      </LinearGradient>
+      </PremiumScreen>
     );
   }
 
   return (
-    <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+    <PremiumScreen scroll={false}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonText}>Voltar</Text>
-          </TouchableOpacity>
+        <PremiumCard style={styles.card}>
+          <View style={styles.topBar}>
+            <PremiumButton secondary label="Voltar" onPress={() => router.back()} style={styles.topButton} />
+            <View style={styles.titleBadge}>
+              <MaterialIcons name="calendar-month" size={20} color={premiumColors.primary} />
+            </View>
+          </View>
 
           <View style={styles.monthHeader}>
             <TouchableOpacity style={styles.monthNav} onPress={() => mudarMes("anterior")}>
-              <Text style={styles.monthNavText}>{"<"}</Text>
+              <MaterialIcons name="chevron-left" size={24} color={premiumColors.text} />
             </TouchableOpacity>
 
-            <View>
+            <View style={styles.monthTitleBlock}>
               <Text style={styles.title}>Historico</Text>
               <Text style={styles.subtitle}>
-                {MESES[mesSelecionado]} {anoVisualizado}
+                {MESES[currentMonth]} {currentYear}
               </Text>
             </View>
 
             <TouchableOpacity style={styles.monthNav} onPress={() => mudarMes("proximo")}>
-              <Text style={styles.monthNavText}>{">"}</Text>
+              <MaterialIcons name="chevron-right" size={24} color={premiumColors.text} />
             </TouchableOpacity>
           </View>
+
+          {cycleUpdating ? (
+            <View style={styles.inlineLoading}>
+              <ActivityIndicator size="small" color={premiumColors.primary} />
+              <Text style={styles.inlineLoadingText}>Atualizando calendario do ciclo...</Text>
+            </View>
+          ) : null}
 
           <View style={styles.weekRow}>
             {DIAS_SEMANA.map((dia, index) => (
@@ -194,7 +208,7 @@ export default function HistoricoScreen() {
           <View style={styles.calendarGrid}>
             {blocosCalendario.map((bloco, index) => {
               if (bloco.dia === null) {
-                return <View key={`empty-${index}`} style={styles.dayCell} />;
+                return <View key={`empty-${index}`} style={styles.dayCellEmpty} />;
               }
 
               const temCompra = diasComCompra.has(bloco.dia);
@@ -211,14 +225,12 @@ export default function HistoricoScreen() {
                       router.push({
                         pathname: "/(tabs)/gastos",
                         params: {
-                          data: `${anoVisualizado}-${String(mesSelecionado + 1).padStart(2, "0")}-${String(bloco.dia).padStart(2, "0")}`,
+                          data: `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(bloco.dia).padStart(2, "0")}`,
                         },
                       });
                     }
                   }}>
-                  <Text style={[styles.dayText, selecionado && styles.dayTextActive]}>
-                    {bloco.dia}
-                  </Text>
+                  <Text style={[styles.dayText, selecionado && styles.dayTextActive]}>{bloco.dia}</Text>
                   {temCompra ? <View style={styles.dayDot} /> : null}
                 </TouchableOpacity>
               );
@@ -228,9 +240,7 @@ export default function HistoricoScreen() {
           <Text style={styles.sectionTitle}>
             {diaSelecionado === null
               ? "Selecione um dia"
-              : `Compras de ${String(diaSelecionado).padStart(2, "0")}/${String(
-                  mesSelecionado + 1
-                ).padStart(2, "0")}/${anoVisualizado}`}
+              : `Compras de ${String(diaSelecionado).padStart(2, "0")}/${String(currentMonth + 1).padStart(2, "0")}/${currentYear}`}
           </Text>
 
           {diaSelecionado !== null && comprasDoDia.length === 0 ? (
@@ -238,7 +248,7 @@ export default function HistoricoScreen() {
           ) : null}
 
           {comprasDoDia.map((compra: CompraHistorico) => (
-            <View key={compra.id} style={styles.purchaseRow}>
+            <PremiumCard key={compra.id} style={styles.purchaseRow}>
               <View style={styles.purchaseMainInfo}>
                 <Text style={styles.purchaseName}>{compra.nome}</Text>
                 <Text style={styles.purchaseDate}>{formatarData(compra.data)}</Text>
@@ -252,215 +262,194 @@ export default function HistoricoScreen() {
 
               <View style={styles.purchaseActions}>
                 {compra.fotoNotaUri ? (
-                  <TouchableOpacity
-                    style={styles.purchaseActionSecondary}
+                  <PremiumButton
+                    secondary
+                    label="Ver nota"
                     onPress={() =>
                       router.push({
                         pathname: "/(tabs)/nota/[id]",
                         params: { id: String(compra.id) },
                       })
-                    }>
-                    <Text style={styles.purchaseActionSecondaryText}>Ver nota</Text>
-                  </TouchableOpacity>
+                    }
+                    style={styles.purchaseAction}
+                  />
                 ) : null}
 
-                <TouchableOpacity
-                  style={styles.purchaseActionPrimary}
+                <PremiumButton
+                  label="Detalhes"
                   onPress={() =>
                     router.push({
                       pathname: "/(tabs)/compra/[id]",
                       params: { id: String(compra.id) },
                     })
-                  }>
-                  <Text style={styles.purchaseActionPrimaryText}>Detalhes</Text>
-                </TouchableOpacity>
+                  }
+                  style={styles.purchaseAction}
+                />
               </View>
-            </View>
+            </PremiumCard>
           ))}
-        </View>
+        </PremiumCard>
       </ScrollView>
-    </LinearGradient>
+    </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   content: {
-    flexGrow: 1,
-    padding: 20,
-    justifyContent: "center",
+    paddingBottom: premiumSpacing.lg,
   },
   card: {
-    backgroundColor: "#e9eceb",
-    borderRadius: 30,
-    padding: 22,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    gap: premiumSpacing.sm,
   },
-  backButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "#d7dfda",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 18,
+  loadingCard: {
+    width: "100%",
+    minHeight: 180,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
   },
-  backButtonText: {
-    color: "#3f5d4d",
-    fontWeight: "700",
+  loadingText: {
+    color: premiumColors.text,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  topButton: {
+    minWidth: 108,
+  },
+  titleBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: premiumColors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
   },
   monthHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 18,
+  },
+  monthTitleBlock: {
+    alignItems: "center",
+    gap: 4,
   },
   monthNav: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#d7dfda",
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: premiumColors.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
-  },
-  monthNavText: {
-    color: "#2f5d45",
-    fontWeight: "800",
-    fontSize: 18,
+    borderWidth: 1,
+    borderColor: premiumColors.border,
   },
   title: {
-    fontSize: 26,
-    fontWeight: "bold",
-    textAlign: "center",
-    color: "#2f5d45",
+    fontSize: 30,
+    fontWeight: "800",
+    color: premiumColors.text,
   },
   subtitle: {
-    textAlign: "center",
-    color: "#66766d",
-    marginTop: 4,
+    color: premiumColors.textSecondary,
+    fontSize: 15,
+  },
+  inlineLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  inlineLoadingText: {
+    color: premiumColors.textSecondary,
+    fontSize: 13,
   },
   weekRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 10,
   },
   weekLabel: {
     width: "14.2%",
     textAlign: "center",
-    color: "#617168",
+    color: premiumColors.textSecondary,
     fontWeight: "700",
   },
   calendarGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginBottom: 22,
+    marginTop: 8,
+  },
+  dayCellEmpty: {
+    width: "14.2%",
+    aspectRatio: 1,
+    marginBottom: 8,
   },
   dayCell: {
     width: "14.2%",
     aspectRatio: 1,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 16,
-    marginBottom: 6,
+    borderRadius: 18,
+    marginBottom: 8,
+    backgroundColor: premiumColors.surfaceMuted,
   },
   dayCellActive: {
-    backgroundColor: "#2f5d45",
+    backgroundColor: premiumColors.primary,
   },
   dayText: {
-    color: "#34443c",
-    fontWeight: "600",
+    color: premiumColors.text,
+    fontWeight: "700",
   },
   dayTextActive: {
-    color: "#fff",
+    color: premiumColors.surface,
   },
   dayDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#e17055",
+    backgroundColor: premiumColors.primary,
     marginTop: 4,
   },
   sectionTitle: {
-    color: "#2f5d45",
+    color: premiumColors.text,
     fontWeight: "800",
-    fontSize: 16,
-    marginBottom: 12,
+    fontSize: 17,
+    marginTop: 4,
   },
   emptyText: {
-    color: "#6c7a73",
-    marginBottom: 8,
+    color: premiumColors.textSecondary,
   },
   purchaseRow: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
+    padding: 0,
+    marginTop: 4,
   },
   purchaseMainInfo: {
-    marginBottom: 12,
+    marginBottom: 14,
   },
   purchaseName: {
-    color: "#2f5d45",
-    fontWeight: "700",
-    fontSize: 15,
+    color: premiumColors.text,
+    fontWeight: "800",
+    fontSize: 16,
   },
   purchaseDate: {
-    color: "#6c7a73",
+    color: premiumColors.textSecondary,
     marginTop: 4,
     fontSize: 12,
   },
   purchaseBuyer: {
-    color: "#486756",
-    marginTop: 6,
+    color: premiumColors.primary,
+    marginTop: 8,
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
     lineHeight: 18,
   },
   purchaseActions: {
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
   },
-  purchaseActionPrimary: {
+  purchaseAction: {
     flex: 1,
-    backgroundColor: "#2f5d45",
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  purchaseActionPrimaryText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
-  purchaseActionSecondary: {
-    flex: 1,
-    backgroundColor: "#dce7e0",
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  purchaseActionSecondaryText: {
-    color: "#2f5d45",
-    fontWeight: "700",
-  },
-  loadingCard: {
-    flex: 1,
-    margin: 20,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#e9eceb",
-    borderRadius: 24,
-  },
-  loadingText: {
-    color: "#2f5d45",
-    fontSize: 16,
-    fontWeight: "600",
   },
 });
