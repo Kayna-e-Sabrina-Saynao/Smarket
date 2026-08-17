@@ -44,7 +44,6 @@ export default function Gastos() {
   const { currentMonth, currentYear, cycleLoading, cycleUpdating, getCurrentCycle } = useCycle();
   const [premiumModalVisible, setPremiumModalVisible] = useState(false);
   const [premiumNoticeShown, setPremiumNoticeShown] = useState(false);
-  const listaSelecionada = null;
   const dataSelecionada = Array.isArray(params.data) ? params.data[0] : params.data;
   const compraFinalizadaComSucesso = Array.isArray(params.success)
     ? params.success[0] === "1"
@@ -125,64 +124,6 @@ export default function Gastos() {
           }}
         />
       </PremiumScreen>
-    );
-  }
-
-  if (carregandoDados) {
-    return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
-        <View style={styles.loadingCard}>
-          <Text style={styles.loadingText}>Carregando gastos...</Text>
-        </View>
-      </LinearGradient>
-    );
-  }
-
-  if (listaSelecionada) {
-    return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
-        <ScrollView contentContainerStyle={styles.content}>
-          <BackButton
-            fallback="/(tabs)/gastos"
-            light
-            onPress={() => setListaSelecionada(null)}
-            style={styles.backButton}
-          />
-
-          <View style={styles.card}>
-            <Text style={styles.title}>{listaSelecionada.nome}</Text>
-            <Text style={styles.subtitle}>{formatarData(listaSelecionada.data)}</Text>
-            <Text style={styles.value}>{formatarMoeda(listaSelecionada.totais.totalFinal)}</Text>
-
-            {listaSelecionada.notaFiscalImage ? (
-              <Image
-                source={{ uri: listaSelecionada.notaFiscalImage }}
-                style={styles.receiptImage}
-                contentFit="cover"
-              />
-            ) : null}
-
-            {listaSelecionada.categorias.map((categoria) => (
-              <View key={categoria} style={styles.detailSection}>
-                <Text style={styles.detailTitle}>{categoria}</Text>
-                {listaSelecionada.produtos
-                  .filter((produto) => produto.categoria === categoria)
-                  .map((produto) => (
-                    <View key={produto.id} style={styles.detailItem}>
-                      <View>
-                        <Text style={styles.itemName}>{produto.nome}</Text>
-                        <Text style={styles.itemMeta}>
-                          {produto.quantidade} x {formatarMoeda(produto.valorUnitario ?? 0)}
-                        </Text>
-                      </View>
-                      <Text style={styles.itemValue}>{formatarMoeda(produto.subtotal ?? 0)}</Text>
-                    </View>
-                  ))}
-              </View>
-            ))}
-          </View>
-        </ScrollView>
-      </LinearGradient>
     );
   }
 
