@@ -88,6 +88,8 @@ npm run android      # Inicia no Android
 npm run ios          # Inicia no iOS
 npm run web          # Inicia no navegador
 npm run lint         # ESLint (config expo)
+npm test             # Jest (unitários)
+npm run test:watch   # Jest em modo watch
 npx tsc --noEmit     # Type check
 ```
 

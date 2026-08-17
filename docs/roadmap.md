@@ -21,14 +21,16 @@ Prioridade das áreas (definida pela dona do projeto): **segurança > funcionali
 
 ## Em desenvolvimento
 
+- [x] Testes automatizados: Jest configurado; cobertura inicial dos utilitários de permissão de plano e acesso admin.
+- [ ] Ampliar testes: formatadores, serviços e componentes de UI.
 - [ ] Padronizar as telas legais (sobre, privacidade, termos, ajuda) com o tema premium.
 - [ ] Deep link `/convite` funcional para entrada de membros da família.
 - [ ] Sistema de família completo no backend (cloud functions + firestore rules).
 
 ## Próximas melhorias
 
-- [ ] Testes automatizados (unitários com Jest e de integração).
-- [ ] CI/CD (GitHub Actions): typecheck, lint e build de preview.
+- [ ] Testes de integração e de componentes (jest-expo + Testing Library).
+- [ ] CI/CD (GitHub Actions): typecheck, lint, testes e build de preview.
 - [ ] Suporte a múltiplos idiomas (pt-BR como padrão).
 - [ ] Modo escuro consistente nas telas.
 - [ ] Cache offline melhorado e sincronização de conflitos.
