@@ -1,29 +1,29 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+
+import { PremiumButton } from "@/src/components/premium/PremiumButton";
+import { PremiumCard } from "@/src/components/premium/PremiumCard";
+import { PremiumScreen } from "@/src/components/premium/PremiumScreen";
+import { premiumColors, premiumSpacing } from "@/src/theme/premium-ui";
 
 export default function PrivacidadeScreen() {
   const router = useRouter();
 
   return (
-    <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+    <PremiumScreen scroll={false}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonText}>Voltar</Text>
-          </TouchableOpacity>
-
-          <View style={styles.headerRow}>
-            <View>
-              <Text style={styles.title}>Politica de Privacidade</Text>
-              <Text style={styles.subtitle}>Como o SMARKET protege seus dados.</Text>
-            </View>
-            <View style={styles.iconCircle}>
-              <MaterialIcons name="verified-user" size={22} color="#2f5d45" />
+        <PremiumCard style={styles.card}>
+          <View style={styles.topBar}>
+            <PremiumButton secondary label="Voltar" onPress={() => router.back()} style={styles.topButton} />
+            <View style={styles.titleBadge}>
+              <MaterialIcons name="verified-user" size={22} color={premiumColors.primary} />
             </View>
           </View>
+
+          <Text style={styles.title}>Politica de Privacidade</Text>
+          <Text style={styles.subtitle}>Como o SMARKET protege seus dados.</Text>
 
           <InfoBlock
             title="Dados usados"
@@ -41,9 +41,9 @@ export default function PrivacidadeScreen() {
             title="Controle"
             text="Voce pode sair da conta a qualquer momento. Seus dados permanecem vinculados ao seu login para restauracao futura."
           />
-        </View>
+        </PremiumCard>
       </ScrollView>
-    </LinearGradient>
+    </PremiumScreen>
   );
 }
 
@@ -57,49 +57,50 @@ function InfoBlock({ title, text }: { title: string; text: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { flexGrow: 1, padding: 20 },
+  content: {
+    paddingBottom: premiumSpacing.lg,
+  },
   card: {
-    backgroundColor: "#e9eceb",
-    borderRadius: 30,
-    padding: 22,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
-    elevation: 5,
+    gap: premiumSpacing.sm,
   },
-  backButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "#d7dfda",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 18,
-  },
-  backButtonText: { color: "#3f5d4d", fontWeight: "700" },
-  headerRow: {
+  topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 18,
+    alignItems: "center",
   },
-  title: { color: "#173428", fontSize: 28, fontWeight: "800" },
-  subtitle: { color: "#607068", marginTop: 6 },
-  iconCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: "#dce7e0",
+  topButton: {
+    minWidth: 108,
+  },
+  titleBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: premiumColors.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
   },
-  block: {
-    backgroundColor: "#f4f8f5",
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 12,
+  title: {
+    color: premiumColors.text,
+    fontSize: 30,
+    fontWeight: "800",
   },
-  blockTitle: { color: "#173428", fontWeight: "800", marginBottom: 6 },
-  blockText: { color: "#607068", lineHeight: 21 },
+  subtitle: {
+    color: premiumColors.textSecondary,
+    marginTop: -10,
+    lineHeight: 20,
+  },
+  block: {
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumSpacing.sm,
+    padding: 16,
+  },
+  blockTitle: {
+    color: premiumColors.text,
+    fontWeight: "800",
+    marginBottom: 6,
+  },
+  blockText: {
+    color: premiumColors.textSecondary,
+    lineHeight: 21,
+  },
 });

@@ -1,30 +1,33 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import {
   SMARKET_APP_DESCRIPTION,
   SMARKET_APP_NAME,
   SMARKET_APP_VERSION,
 } from "@/src/config/app";
+import { PremiumButton } from "@/src/components/premium/PremiumButton";
+import { PremiumCard } from "@/src/components/premium/PremiumCard";
+import { PremiumScreen } from "@/src/components/premium/PremiumScreen";
+import { premiumColors, premiumSpacing } from "@/src/theme/premium-ui";
 
 export default function SobreScreen() {
   const router = useRouter();
 
   return (
-    <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+    <PremiumScreen scroll={false}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonText}>Voltar</Text>
-          </TouchableOpacity>
+        <PremiumCard style={styles.card}>
+          <View style={styles.topBar}>
+            <PremiumButton secondary label="Voltar" onPress={() => router.back()} style={styles.topButton} />
+            <View style={styles.titleBadge}>
+              <MaterialIcons name="shopping-bag" size={22} color={premiumColors.primary} />
+            </View>
+          </View>
 
           <View style={styles.hero}>
-            <View style={styles.heroIcon}>
-              <MaterialIcons name="shopping-bag" size={30} color="#2f5d45" />
-            </View>
             <Text style={styles.title}>{SMARKET_APP_NAME}</Text>
             <Text style={styles.version}>Versao {SMARKET_APP_VERSION}</Text>
             <Text style={styles.description}>{SMARKET_APP_DESCRIPTION}</Text>
@@ -42,9 +45,9 @@ export default function SobreScreen() {
             title="Pronto para crescer"
             text="A base de assinatura, onboarding, historico, familia e analytics ja fica pronta para a publicacao na Play Store."
           />
-        </View>
+        </PremiumCard>
       </ScrollView>
-    </LinearGradient>
+    </PremiumScreen>
   );
 }
 
@@ -58,54 +61,60 @@ function InfoBlock({ title, text }: { title: string; text: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { flexGrow: 1, padding: 20 },
+  content: {
+    paddingBottom: premiumSpacing.lg,
+  },
   card: {
-    backgroundColor: "#e9eceb",
-    borderRadius: 30,
-    padding: 22,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
-    elevation: 5,
+    gap: premiumSpacing.sm,
   },
-  backButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "#d7dfda",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 18,
-  },
-  backButtonText: { color: "#3f5d4d", fontWeight: "700" },
-  hero: {
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 18,
   },
-  heroIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: "#dce7e0",
+  topButton: {
+    minWidth: 108,
+  },
+  titleBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: premiumColors.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 14,
   },
-  title: { color: "#173428", fontSize: 30, fontWeight: "800" },
-  version: { color: "#607068", marginTop: 6, fontWeight: "700" },
+  hero: {
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  title: {
+    color: premiumColors.text,
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  version: {
+    color: premiumColors.textSecondary,
+    marginTop: 6,
+    fontWeight: "700",
+  },
   description: {
-    color: "#607068",
+    color: premiumColors.textSecondary,
     textAlign: "center",
     marginTop: 12,
     lineHeight: 21,
   },
   block: {
-    backgroundColor: "#f4f8f5",
-    borderRadius: 20,
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumSpacing.sm,
     padding: 16,
-    marginBottom: 12,
   },
-  blockTitle: { color: "#173428", fontWeight: "800", marginBottom: 6 },
-  blockText: { color: "#607068", lineHeight: 21 },
+  blockTitle: {
+    color: premiumColors.text,
+    fontWeight: "800",
+    marginBottom: 6,
+  },
+  blockText: {
+    color: premiumColors.textSecondary,
+    lineHeight: 21,
+  },
 });
