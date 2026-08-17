@@ -135,8 +135,13 @@ const categoriasPadrao: CategoriaOpcao[] = [
   { nome: "Padaria", cor: "#d4a373" },
 ];
 
-const ANO_FIXO_CICLO = 2026;
-const normalizarCicloAno = () => ANO_FIXO_CICLO;
+const normalizarCicloAno = (ano?: number) => {
+  if (typeof ano === "number" && Number.isInteger(ano) && ano >= 2020) {
+    return ano;
+  }
+
+  return new Date().getFullYear();
+};
 const chaveBackupLocal = (uid: string) => `smarket:orcamento:${uid}`;
 
 const dadosIniciais: DadosSalvos = {
@@ -390,7 +395,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   const [onMarketItems, setOnMarketItems] = useState<OnMarketItem[]>([]);
   const [historicoCompras, setHistoricoCompras] = useState<CompraHistorico[]>([]);
   const [categoriasPersonalizadas, setCategoriasPersonalizadas] = useState<CategoriaOpcao[]>([]);
-  const [cicloAno, setCicloAno] = useState(ANO_FIXO_CICLO);
+const [cicloAno, setCicloAno] = useState(normalizarCicloAno());
   const [carregandoDados, setCarregandoDados] = useState(true);
   const usuarioAtualRef = useRef<string | null>(null);
   const podeSalvarRef = useRef(false);
@@ -399,7 +404,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
   const onMarketItemsRef = useRef<OnMarketItem[]>([]);
   const historicoComprasRef = useRef<CompraHistorico[]>([]);
   const categoriasPersonalizadasRef = useRef<CategoriaOpcao[]>([]);
-  const cicloAnoRef = useRef(ANO_FIXO_CICLO);
+  const cicloAnoRef = useRef(normalizarCicloAno());
 
   const salvarDadosUsuario = useCallback(async (uid: string, dadosParaSalvar: DadosSalvos) => {
     if (!uid) {
@@ -853,8 +858,8 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
 
         return { sucesso: true };
       },
-      iniciarNovoCiclo: (ano) => {
-        setCicloAno(normalizarCicloAno());
+iniciarNovoCiclo: (ano) => {
+        setCicloAno(normalizarCicloAno(ano));
         setHistoricoCompras([]);
         setItems([]);
         setOnMarketItems([]);
