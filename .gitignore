@@ -50,3 +50,6 @@ app-example
 
 # Cache
 .cache/
+
+# Copia antiga aninhada do app (repo proprio)
+/Smarket/
