@@ -1,5 +1,4 @@
 import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -15,8 +14,11 @@ import { useBudget } from "@/context/budget-context";
 import { PremiumFeatureModal } from "@/src/components/PremiumFeatureModal";
 import { PremiumLockedState } from "@/src/components/PremiumLockedState";
 import { PremiumButton } from "@/src/components/premium/PremiumButton";
+import { PremiumCard } from "@/src/components/premium/PremiumCard";
+import { PremiumScreen } from "@/src/components/premium/PremiumScreen";
 import { useSubscription } from "@/src/context/subscription-context";
 import { baixarOuCompartilharPdfCompra } from "@/src/services/purchasePdfService";
+import { premiumColors, premiumRadius, premiumSpacing } from "@/src/theme/premium-ui";
 import { canViewHistory } from "@/src/utils/planPermissions";
 
 const formatarMoeda = (valor: number) =>
@@ -56,17 +58,17 @@ export default function CompraDetalheScreen() {
 
   if (carregandoDados || subscriptionLoading) {
     return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
-        <View style={styles.loadingCard}>
-          <Text style={styles.loadingText}>Carregando compra...</Text>
+      <PremiumScreen>
+        <View style={styles.centerCard}>
+          <Text style={styles.centerText}>Carregando compra...</Text>
         </View>
-      </LinearGradient>
+      </PremiumScreen>
     );
   }
 
   if (premiumBlocked) {
     return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+      <PremiumScreen>
         <PremiumLockedState
           title="Detalhes da compra bloqueados"
           description="A visualizacao completa dos detalhes da compra faz parte dos planos Pro e Familia."
@@ -83,17 +85,17 @@ export default function CompraDetalheScreen() {
             router.push("/(tabs)/planos");
           }}
         />
-      </LinearGradient>
+      </PremiumScreen>
     );
   }
 
   if (!compra) {
     return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
-        <View style={styles.loadingCard}>
-          <Text style={styles.loadingText}>Compra nao encontrada.</Text>
+      <PremiumScreen>
+        <View style={styles.centerCard}>
+          <Text style={styles.centerText}>Compra nao encontrada.</Text>
         </View>
-      </LinearGradient>
+      </PremiumScreen>
     );
   }
 
@@ -124,9 +126,9 @@ export default function CompraDetalheScreen() {
   };
 
   return (
-    <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+    <PremiumScreen scroll={false}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
+        <PremiumCard style={styles.card}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Text style={styles.backButtonText}>Voltar</Text>
           </TouchableOpacity>
@@ -209,87 +211,72 @@ export default function CompraDetalheScreen() {
               </TouchableOpacity>
             </>
           ) : null}
-        </View>
+        </PremiumCard>
       </ScrollView>
-    </LinearGradient>
+    </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   content: {
-    flexGrow: 1,
-    padding: 20,
-    justifyContent: "center",
+    paddingBottom: premiumSpacing.lg,
   },
   card: {
-    backgroundColor: "#e9eceb",
-    borderRadius: 30,
-    padding: 22,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    gap: premiumSpacing.sm,
   },
   backButton: {
     alignSelf: "flex-start",
-    backgroundColor: "#d7dfda",
-    borderRadius: 12,
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumRadius.sm,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    marginBottom: 18,
+    marginBottom: 4,
   },
   backButtonText: {
-    color: "#3f5d4d",
+    color: premiumColors.text,
     fontWeight: "700",
   },
   title: {
     fontSize: 28,
-    fontWeight: "bold",
+    fontWeight: "800",
     textAlign: "center",
-    color: "#2f5d45",
+    color: premiumColors.text,
   },
   subtitle: {
     textAlign: "center",
-    color: "#66766d",
+    color: premiumColors.textSecondary,
     marginTop: 6,
-    marginBottom: 20,
+    marginBottom: 8,
   },
   summaryCard: {
-    backgroundColor: "#dce7e0",
-    borderRadius: 20,
+    backgroundColor: premiumColors.successSoft,
+    borderRadius: premiumRadius.md,
     padding: 18,
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 4,
   },
   summaryLabel: {
-    color: "#486756",
+    color: premiumColors.textSecondary,
     fontWeight: "700",
     marginBottom: 6,
   },
   summaryValue: {
-    color: "#2f5d45",
+    color: premiumColors.primary,
     fontWeight: "800",
     fontSize: 28,
   },
   summaryMeta: {
-    color: "#61736a",
+    color: premiumColors.textSecondary,
     marginTop: 10,
     textAlign: "center",
     lineHeight: 20,
     fontWeight: "600",
   },
   pdfButton: {
-    marginBottom: 8,
+    marginBottom: 4,
   },
   sectionTitle: {
-    color: "#2f5d45",
+    color: premiumColors.text,
     fontWeight: "800",
     fontSize: 16,
     marginBottom: 10,
@@ -302,7 +289,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   categoryBadge: {
-    borderRadius: 999,
+    borderRadius: premiumRadius.pill,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
@@ -312,8 +299,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   itemRow: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumRadius.sm,
     padding: 14,
     marginBottom: 10,
     flexDirection: "row",
@@ -324,52 +311,54 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   itemName: {
-    color: "#2f5d45",
+    color: premiumColors.text,
     fontWeight: "700",
     fontSize: 15,
   },
   itemMeta: {
-    color: "#6c7a73",
+    color: premiumColors.textSecondary,
     marginTop: 4,
     fontSize: 12,
   },
   itemTotal: {
-    color: "#2f5d45",
+    color: premiumColors.text,
     fontWeight: "800",
   },
   imageCard: {
-    backgroundColor: "#dce7e0",
-    borderRadius: 18,
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumRadius.md,
     padding: 10,
     marginTop: 4,
   },
   image: {
     width: "100%",
     height: 240,
-    borderRadius: 14,
-    backgroundColor: "#c8d4ce",
+    borderRadius: premiumRadius.sm,
+    backgroundColor: premiumColors.surfaceMuted,
   },
   viewImageButton: {
     marginTop: 10,
-    backgroundColor: "#2f5d45",
-    borderRadius: 14,
+    backgroundColor: premiumColors.primary,
+    borderRadius: premiumRadius.sm,
     paddingVertical: 12,
     alignItems: "center",
   },
   viewImageButtonText: {
-    color: "#fff",
+    color: premiumColors.surface,
     fontWeight: "700",
   },
-  loadingCard: {
+  centerCard: {
     flex: 1,
     margin: 20,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#e9eceb",
-    borderRadius: 24,
+    backgroundColor: premiumColors.surface,
+    borderRadius: premiumRadius.lg,
+    borderWidth: 1,
+    borderColor: premiumColors.border,
   },
-  loadingText: {
-    color: "#2f5d45",
+  centerText: {
+    color: premiumColors.text,
     fontSize: 16,
     fontWeight: "600",
   },

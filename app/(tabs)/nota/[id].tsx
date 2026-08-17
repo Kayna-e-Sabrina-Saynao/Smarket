@@ -1,5 +1,4 @@
 import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -14,7 +13,9 @@ import {
 import { useBudget } from "@/context/budget-context";
 import { PremiumFeatureModal } from "@/src/components/PremiumFeatureModal";
 import { PremiumLockedState } from "@/src/components/PremiumLockedState";
+import { PremiumScreen } from "@/src/components/premium/PremiumScreen";
 import { useSubscription } from "@/src/context/subscription-context";
+import { premiumColors, premiumRadius, premiumSpacing } from "@/src/theme/premium-ui";
 import { canViewHistory } from "@/src/utils/planPermissions";
 
 const formatarData = (data: string) => {
@@ -58,17 +59,17 @@ export default function NotaScreen() {
 
   if (carregandoDados || subscriptionLoading) {
     return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+      <PremiumScreen>
         <View style={styles.centerCard}>
           <Text style={styles.centerText}>Carregando nota...</Text>
         </View>
-      </LinearGradient>
+      </PremiumScreen>
     );
   }
 
   if (premiumBlocked) {
     return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+      <PremiumScreen>
         <PremiumLockedState
           title="Nota detalhada bloqueada"
           description="Visualizar e ampliar a nota completa faz parte dos planos Pro e Familia."
@@ -85,22 +86,22 @@ export default function NotaScreen() {
             router.push("/(tabs)/planos");
           }}
         />
-      </LinearGradient>
+      </PremiumScreen>
     );
   }
 
   if (!compra?.fotoNotaUri) {
     return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+      <PremiumScreen>
         <View style={styles.centerCard}>
           <Text style={styles.centerText}>Nota nao encontrada.</Text>
         </View>
-      </LinearGradient>
+      </PremiumScreen>
     );
   }
 
   return (
-    <LinearGradient colors={["#173428", "#0f241b"]} style={styles.container}>
+    <PremiumScreen scroll={false}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>Voltar</Text>
@@ -167,41 +168,40 @@ export default function NotaScreen() {
           </View>
         </ScrollView>
       </ScrollView>
-    </LinearGradient>
+    </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   header: {
-    paddingTop: 54,
-    paddingHorizontal: 20,
+    paddingTop: premiumSpacing.sm,
+    paddingHorizontal: premiumSpacing.sm,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
   backButton: {
-    backgroundColor: "#d7dfda",
-    borderRadius: 12,
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumRadius.sm,
     paddingHorizontal: 14,
     paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: premiumColors.border,
   },
   backButtonText: {
-    color: "#244534",
+    color: premiumColors.text,
     fontWeight: "700",
   },
   headerInfo: {
     flex: 1,
   },
   title: {
-    color: "#fff",
+    color: premiumColors.text,
     fontWeight: "800",
     fontSize: 22,
   },
   subtitle: {
-    color: "#d7e3dc",
+    color: premiumColors.textSecondary,
     marginTop: 4,
     fontSize: 13,
   },
@@ -209,52 +209,54 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 20,
+    paddingHorizontal: premiumSpacing.sm,
     marginTop: 18,
   },
   controlButton: {
     width: 44,
     height: 44,
-    borderRadius: 14,
-    backgroundColor: "#dce7e0",
+    borderRadius: premiumRadius.sm,
+    backgroundColor: premiumColors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: premiumColors.border,
     alignItems: "center",
     justifyContent: "center",
   },
   controlButtonText: {
-    color: "#244534",
+    color: premiumColors.text,
     fontSize: 22,
     fontWeight: "800",
   },
   zoomBadge: {
-    backgroundColor: "#244534",
-    borderRadius: 14,
+    backgroundColor: premiumColors.primary,
+    borderRadius: premiumRadius.sm,
     paddingHorizontal: 16,
     paddingVertical: 11,
   },
   zoomBadgeText: {
-    color: "#fff",
+    color: premiumColors.surface,
     fontWeight: "700",
   },
   resetButton: {
-    backgroundColor: "#2f5d45",
-    borderRadius: 14,
+    backgroundColor: premiumColors.text,
+    borderRadius: premiumRadius.sm,
     paddingHorizontal: 16,
     paddingVertical: 11,
     marginLeft: "auto",
   },
   resetButtonText: {
-    color: "#fff",
+    color: premiumColors.surface,
     fontWeight: "700",
   },
   helperText: {
-    color: "#d7e3dc",
-    paddingHorizontal: 20,
+    color: premiumColors.textSecondary,
+    paddingHorizontal: premiumSpacing.sm,
     marginTop: 12,
     marginBottom: 12,
     fontSize: 13,
   },
   horizontalScrollContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: premiumSpacing.sm,
     paddingBottom: 24,
   },
   verticalScrollContent: {
@@ -262,27 +264,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   imageFrame: {
-    backgroundColor: "#eef3f0",
-    borderRadius: 24,
+    backgroundColor: premiumColors.surface,
+    borderRadius: premiumRadius.lg,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#dce7e0",
+    borderColor: premiumColors.border,
   },
   image: {
     width: "100%",
     height: "100%",
-    backgroundColor: "#eef3f0",
+    backgroundColor: premiumColors.surface,
   },
   centerCard: {
     flex: 1,
     margin: 20,
-    borderRadius: 24,
-    backgroundColor: "#e9eceb",
+    borderRadius: premiumRadius.lg,
+    backgroundColor: premiumColors.surface,
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: premiumColors.border,
   },
   centerText: {
-    color: "#2f5d45",
+    color: premiumColors.text,
     fontWeight: "700",
     fontSize: 16,
   },

@@ -1,4 +1,3 @@
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
 import {
@@ -10,6 +9,9 @@ import {
 } from "react-native";
 
 import { Categoria, useBudget } from "@/context/budget-context";
+import { PremiumCard } from "@/src/components/premium/PremiumCard";
+import { PremiumScreen } from "@/src/components/premium/PremiumScreen";
+import { premiumColors, premiumRadius, premiumSpacing } from "@/src/theme/premium-ui";
 
 const formatarMoeda = (valor: number) =>
   valor.toLocaleString("pt-BR", {
@@ -28,18 +30,18 @@ export default function CategoriaDetalheScreen() {
 
   if (carregandoDados) {
     return (
-      <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
-        <View style={styles.loadingCard}>
-          <Text style={styles.loadingText}>Carregando categoria...</Text>
+      <PremiumScreen>
+        <View style={styles.centerCard}>
+          <Text style={styles.centerText}>Carregando categoria...</Text>
         </View>
-      </LinearGradient>
+      </PremiumScreen>
     );
   }
 
   return (
-    <LinearGradient colors={["#5f9f7a", "#2f5d45"]} style={styles.container}>
+    <PremiumScreen scroll={false}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.card}>
+        <PremiumCard style={styles.card}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Text style={styles.backButtonText}>Voltar</Text>
           </TouchableOpacity>
@@ -71,125 +73,104 @@ export default function CategoriaDetalheScreen() {
               </View>
             ))
           )}
-        </View>
+        </PremiumCard>
       </ScrollView>
-    </LinearGradient>
+    </PremiumScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   content: {
-    flexGrow: 1,
-    padding: 20,
-    justifyContent: "center",
+    paddingBottom: premiumSpacing.lg,
   },
   card: {
-    backgroundColor: "#e9eceb",
-    borderRadius: 28,
-    padding: 22,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    gap: premiumSpacing.sm,
   },
   backButton: {
     alignSelf: "flex-start",
-    backgroundColor: "#d7dfda",
-    borderRadius: 12,
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumRadius.sm,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    marginBottom: 18,
+    marginBottom: 4,
   },
   backButtonText: {
-    color: "#3f5d4d",
+    color: premiumColors.text,
     fontWeight: "700",
   },
   title: {
     fontSize: 28,
-    fontWeight: "bold",
-    color: "#2f5d45",
+    fontWeight: "800",
+    color: premiumColors.text,
     textAlign: "center",
   },
   subtitle: {
     textAlign: "center",
-    color: "#66766d",
+    color: premiumColors.textSecondary,
     marginTop: 6,
-    marginBottom: 20,
+    marginBottom: 8,
   },
   summaryBox: {
-    backgroundColor: "#dce7e0",
-    borderRadius: 18,
+    backgroundColor: premiumColors.successSoft,
+    borderRadius: premiumRadius.md,
     padding: 16,
     alignItems: "center",
-    marginBottom: 18,
+    marginBottom: 4,
   },
   summaryLabel: {
-    color: "#486756",
+    color: premiumColors.textSecondary,
     fontWeight: "600",
     marginBottom: 6,
   },
   summaryValue: {
     fontSize: 26,
-    fontWeight: "bold",
-    color: "#2f5d45",
+    fontWeight: "800",
+    color: premiumColors.primary,
   },
   item: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
+    backgroundColor: premiumColors.surfaceMuted,
+    borderRadius: premiumRadius.sm,
     padding: 14,
     marginBottom: 12,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   itemName: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#34443c",
+    color: premiumColors.text,
   },
   itemMeta: {
     marginTop: 4,
     fontSize: 12,
-    color: "#6d7c74",
+    color: premiumColors.textSecondary,
   },
   itemTotal: {
     fontSize: 15,
-    fontWeight: "bold",
-    color: "#2f5d45",
+    fontWeight: "800",
+    color: premiumColors.text,
   },
   emptyState: {
     paddingVertical: 30,
     alignItems: "center",
   },
   emptyText: {
-    color: "#718078",
+    color: premiumColors.textSecondary,
     textAlign: "center",
   },
-  loadingCard: {
+  centerCard: {
     flex: 1,
     margin: 20,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#e9eceb",
-    borderRadius: 24,
+    backgroundColor: premiumColors.surface,
+    borderRadius: premiumRadius.lg,
+    borderWidth: 1,
+    borderColor: premiumColors.border,
   },
-  loadingText: {
-    color: "#2f5d45",
+  centerText: {
+    color: premiumColors.text,
     fontSize: 16,
     fontWeight: "600",
   },
